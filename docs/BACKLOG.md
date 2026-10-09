@@ -15,11 +15,14 @@ Status key: ✅ done · 🔄 in progress · ⬜ to do · ⛔ blocked
 | 7 Testing | ✅ | 41 unit/sim tests, browser smoke test, balance simulator. |
 | 8 Mobile readiness | 🔄 | Touch, layout and performance checked in mobile emulation. Native build ⛔ (needs Xcode / Android Studio). |
 | 9 Iteration | 🔄 | See below. |
+| 10 Visual upgrade (3D) | 🔄 | Phase 1 done: Three.js renderer, procedural original models, VFX, lighting, HUD and card redesign. Phase 2 (commissioned models, glTF loading, Sonniss audio) awaiting approval. See `docs/VISUAL_UPGRADE.md`. |
 
 ## Next up (highest impact first)
 
 - ⬜ Human playtest pass on real phones; tune supply rate, clearance times and mission 4/5 difficulty.
-- ⬜ Replace placeholder silhouettes with commissioned unit art (keep silhouettes and team colours).
+- ⬜ Commission hero and line frames as glTF; add a GLTFLoader path in `buildModel()` (awaiting approval).
+- ⬜ Card illustrations rendered from the 3D models.
+- ⬜ Real-device frame-rate pass on older Android and recent iPhone.
 - ⬜ Capacitor native build; swap localStorage for Capacitor Preferences; haptics on deploy.
 - ⬜ Pilot unlock for Castellan Mire's rival in Chapter II; the Ashen Covenant third faction.
 - ⬜ Mission modifiers (fog, supply drought, double clearance) for replay variety.
@@ -32,5 +35,6 @@ Status key: ✅ done · 🔄 in progress · ⬜ to do · ⛔ blocked
 ## Known issues
 
 - Units steer around obstacles locally and can briefly hug rocks in crowded lanes.
-- Drop shadows separate from bodies during the 0.35 s drop-in animation (intended, but reads oddly in still frames).
+- Tracers are drawn on a 2D overlay above the 3D scene, so they are not hidden behind buildings.
+- In the 3D view, units use flat team colours rather than authored textures (placeholder until commissioned models).
 - The music synth plays the same four-chord loop; needs more variation.

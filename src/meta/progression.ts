@@ -19,6 +19,7 @@ export interface Settings {
   showRanges: boolean;
   reduceMotion: boolean;
   difficulty: Difficulty;
+  graphics: 'high' | 'low'; // 3D quality: shadows, resolution and effects density
 }
 
 export interface MissionRecord { cleared: boolean; stars: number; bestTime: number; plays: number; wins: number; bestDifficulty: Difficulty | null }
@@ -44,7 +45,7 @@ export interface Profile {
 }
 
 export function defaultSettings(): Settings {
-  return { music: 0.5, sfx: 0.8, showRanges: true, reduceMotion: false, difficulty: 'veteran' };
+  return { music: 0.5, sfx: 0.8, showRanges: true, reduceMotion: false, difficulty: 'veteran', graphics: 'high' };
 }
 
 export function newProfile(now = Date.now()): Profile {
@@ -260,6 +261,7 @@ export function sanitizeProfile(raw: unknown): Profile {
       music: num(r.settings?.music, 0.5, 0, 1), sfx: num(r.settings?.sfx, 0.8, 0, 1),
       showRanges: r.settings?.showRanges !== false, reduceMotion: !!r.settings?.reduceMotion,
       difficulty: (['recruit', 'veteran', 'elite'] as const).includes(r.settings?.difficulty as Difficulty) ? r.settings!.difficulty : 'veteran',
+      graphics: r.settings?.graphics === 'low' ? 'low' : 'high',
     },
     unitLevels: {}, missions: {}, deck: [], pilot: 'juno_vale',
   };

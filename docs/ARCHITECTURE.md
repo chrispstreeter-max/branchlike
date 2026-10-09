@@ -1,8 +1,8 @@
 # Architecture
 
-## Why TypeScript and canvas, not Unity
+## Why TypeScript and Three.js, not Unity
 
-The brief preferred Unity. The build environment had no Unity editor, no Android SDK and no Xcode, and it could not reach the npm registry. The practical choice was a zero-dependency TypeScript game that compiles with the TypeScript compiler alone and runs in any modern browser. The simulation is engine-agnostic: if the project moves to Unity later, `src/sim` and `src/data` port directly to C#, and the tests describe the expected behaviour.
+The brief preferred Unity. The build environment had no Unity editor, no Android SDK and no Xcode, and it could not reach the npm registry. The practical choice was a TypeScript game that compiles with the TypeScript compiler alone and runs in any modern browser. 3D rendering uses Three.js r160, vendored into `public/js/vendor/` (no package manager needed) and loaded on demand, with automatic fallback to the 2D renderer. The simulation is engine-agnostic: if the project moves to Unity later, `src/sim` and `src/data` port directly to C#, and the tests describe the expected behaviour.
 
 ## Layers
 
@@ -18,7 +18,7 @@ data  ─▶  sim (battle, ai)  ─▶  render  ─▶  ui/screens
 | Simulation | `src/sim/battle.ts` | data | Deterministic fixed step (`DT = 0.05`), seeded RNG, no DOM, no `Math.random`. All input goes through `deploy()` and `useAbility()`, which validate and return an error code. Output is state plus an `events` array per step. |
 | AI | `src/sim/ai.ts` | sim, data | Uses only the public sim API, plays by the same rules and supply as the player. Own seeded RNG, so battles stay reproducible. |
 | Meta | `src/meta` | data | Profile progression as pure functions; versioned save envelope with checksum, backup and recovery, behind a key-value interface. |
-| Render | `src/render` | sim (read-only) | Reads battle state, spawns visual effects from events. Never mutates the battle. |
+| Render | `src/render` | sim (read-only) | `view.ts` defines the `BattleView` interface and picks an implementation: `renderer3d.ts` (Three.js, default) or `renderer.ts` (2D canvas fallback). `models3d.ts` builds original unit models. Reads battle state, spawns effects from events, never mutates the battle. |
 | Audio | `src/audio` | none | WebAudio synth; plays sounds mapped from events by the battle screen. |
 | UI | `src/ui` | everything | Screen factories (`(app) => { el, destroy?, back? }`), a tiny `h()` DOM builder, no framework. |
 

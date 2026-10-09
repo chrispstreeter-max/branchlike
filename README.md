@@ -8,9 +8,9 @@ BRANCHLIKE is an original game. It takes high-level genre principles from lane-a
 
 | Stage | State |
 | --- | --- |
-| Playable prototype (web, phone-first) | **Yes.** Full campaign loop, 6 missions, hangar, upgrades, saves. |
+| Playable prototype (web, phone-first) | **Yes.** Full campaign loop, 6 missions, hangar, upgrades, saves. 3D battlefield (Three.js) with 2D fallback. |
 | Native mobile build (iOS / Android) | Not yet. Configured for Capacitor; needs a Mac/Xcode or Android Studio. See [Mobile builds](#mobile-builds). |
-| Production release | No. Placeholder art and synthesised audio; balance tuned by simulation, not yet by player testing. |
+| Production release | No. Procedural placeholder 3D models and synthesised audio; balance tuned by simulation, not yet by player testing. See [Visual upgrade](docs/VISUAL_UPGRADE.md). |
 
 ## What's in the vertical slice
 
@@ -26,7 +26,7 @@ BRANCHLIKE is an original game. It takes high-level genre principles from lane-a
 
 ## Run it
 
-Requirements: Node.js 20 or newer and TypeScript 5 or newer (`npm i -g typescript`, or `npm i -D typescript` in this folder). There are no runtime dependencies.
+Requirements: Node.js 20 or newer and TypeScript 5 or newer (`npm i -g typescript`, or `npm i -D typescript` in this folder). The only runtime library, Three.js r160, is vendored in `public/js/vendor/`.
 
 ```bash
 npm run build      # compile TypeScript to build/ and assemble the web app in dist/
@@ -36,7 +36,7 @@ npm run smoke      # end-to-end play-test in headless Chromium (needs Playwright
 npm run sim        # AI-vs-AI balance report across all missions and difficulties
 ```
 
-Open `http://localhost:5173` on a phone on the same network, or use your browser's device toolbar. Add `?debug=1` to expose test hooks (`?debug=1&speed=4` runs battles faster).
+Open `http://localhost:5173` on a phone on the same network, or use your browser's device toolbar. Add `?debug=1` to expose test hooks (`?debug=1&speed=4` runs battles faster) and `?render=2d` to force the 2D renderer.
 
 ## Controls
 
@@ -64,7 +64,7 @@ For a native build, swap `browserKV()` in `src/meta/save.ts` for Capacitor Prefe
 src/data/      units, pilots, maps, missions, shared types (all content is data)
 src/sim/       deterministic battle simulation and AI (no DOM)
 src/meta/      progression and save/load (no DOM)
-src/render/    canvas battlefield renderer
+src/render/    3D renderer (Three.js), procedural models, 2D fallback
 src/audio/     WebAudio synthesiser
 src/ui/        app shell, components, screens
 tests/         node:test suites
@@ -79,5 +79,6 @@ docs/          design document, architecture, backlog, testing, assets
 - [Architecture](docs/ARCHITECTURE.md)
 - [Testing guide](docs/TESTING.md)
 - [Backlog](docs/BACKLOG.md)
+- [Visual upgrade: gap analysis and asset stack](docs/VISUAL_UPGRADE.md)
 - [Asset provenance and licences](docs/ASSETS.md)
 - [Changelog](CHANGELOG.md)

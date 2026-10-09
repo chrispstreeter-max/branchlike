@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.2.0 — 3D battlefield (visual upgrade, phase 1)
+
+### Added
+- Real-time 3D battlefield using Three.js r160 (vendored, MIT): perspective camera at 50°, fitted between HUD and card tray; hemisphere and sun lighting with soft shadows; ACES tone mapping; fog.
+- Procedural environments: painted concrete, roads and hazard-band ground textures; city blocks with lit windows; per-map landmarks and themed cover matching the collision shapes.
+- Original procedural 3D models for all 11 units, spires and HALBERD PRIME, with walk cycles, aiming, recoil, hover and drop-in animation.
+- Effects: tracers, rockets, artillery shells with arcs, muzzle flashes, sparks, explosions, smoke, shockwaves, scorch decals, flash lights, drop beams, capture pulses, damage smoke, and ability effects for all 7 abilities.
+- In-world health bars, hero and boss name tags, level pips, stun and shield indicators, hardpoint markers with capture progress, target lines, range rings, deploy-zone highlight, ghost preview.
+- Full-bleed battle layout with gradient HUD and tray; redesigned cards with hex cost badges and unit-class tags.
+- Graphics setting (High quality / Battery saver) and automatic dynamic resolution.
+- `docs/VISUAL_UPGRADE.md`: architecture review, asset gap analysis, researched asset stack, decisions and manual actions.
+
+### Kept
+- The 2D renderer, as an automatic fallback (`?render=2d` forces it).
+- All gameplay, AI, progression and save code unchanged; all 41 tests still pass.
+
 ## 0.1.0 — First playable vertical slice
 
 ### Added

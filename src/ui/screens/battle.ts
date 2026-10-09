@@ -9,7 +9,7 @@ import { UNITS, ABILITIES } from '../../data/units.js';
 import type { Difficulty, Team, AbilityId } from '../../data/types.js';
 import { createBattle, step, deploy, checkDeploy, useAbility, checkAbility, coreOf, entityById, handCards, nextCard, heavyUnlocked, DT, SUPPLY_MAX, type Battle, type DeployError, type AbilityError } from '../../sim/battle.js';
 import { createAi, aiStep, type AiState } from '../../sim/ai.js';
-import { Renderer } from '../../render/renderer.js';
+import { createBattleView, type BattleView } from '../../render/view.js';
 import { deckCards, enemyDeckFor, applyBattleResult } from '../../meta/progression.js';
 
 export interface BattleParams { missionId: string; difficulty: Difficulty }
@@ -38,10 +38,16 @@ export function battleScreen(app: App, params: BattleParams): Screen {
   app.audio.intensity = 1;
 
   // ---------------------------------------------------------------- DOM
-  const canvas = h('canvas', { 'aria-label': `Battlefield: ${mission.name}` });
-  const renderer = new Renderer(canvas);
-  renderer.reset(b.map);
-  const stage = h('div', { class: 'stage' }, canvas);
+  // The view (3D, or 2D fallback) loads asynchronously; until then these calls are no-ops.
+  let view: BattleView | null = null;
+  const renderer = {
+    toWorld: (x: number, y: number) => view ? view.toWorld(x, y) : { x: -1, y: -1, inside: false },
+    overCanvas: (x: number, y: number) => view ? view.overCanvas(x, y) : false,
+    pick: (bb: Battle, x: number, y: number) => view ? view.pick(bb, x, y) : null,
+    ingest: (ev: Battle['events'], rm: boolean) => view?.ingest(ev, rm),
+    draw: (bb: Battle, o: Parameters<BattleView['draw']>[1], dt: number) => view?.draw(bb, o, dt),
+  };
+  const stage = h('div', { class: 'stage', role: 'application', 'aria-label': `Battlefield: ${mission.name}` });
   const scoreL = h('span', { class: 'val' }), scoreR = h('span', { class: 'val' });
   const barL = h('i'), barR = h('i');
   const lblL = h('span', { class: 'lbl' }), lblR = h('span', { class: 'lbl' });
@@ -67,6 +73,7 @@ export function battleScreen(app: App, params: BattleParams): Screen {
   let ghost: { unit: string; x: number; y: number; valid: boolean } | null = null;
   let targeting: { source: number | 'pilot'; ability: AbilityId } | null = null;
   let aim: { x: number; y: number } | null = null;
+  let disposed = false;
   let paused = false, finished = false, raf = 0, last = performance.now(), acc = 0;
   let drag: { index: number; startX: number; startY: number; moved: boolean; ghostEl: HTMLElement } | null = null;
   let infoEl: HTMLElement | null = null;
@@ -90,10 +97,11 @@ export function battleScreen(app: App, params: BattleParams): Screen {
     handKey = key;
     hand.replaceChildren(...cards.map((c, i) => {
       const d = UNITS[c.unit];
-      const btn = h('button', { class: 'card', 'data-i': String(i), 'aria-label': `${d.name}, ${d.cost} supply. Key ${i + 1}` },
+      const kindLabel: Record<string, string> = { infantry: 'Inf', drone: 'Drone', vehicle: 'Vehicle', mech: 'Frame', hero: 'Hero', structure: 'Struct' };
+      const btn = h('button', { class: 'card', 'data-i': String(i), 'data-kind': d.kind, 'aria-label': `${d.name}, ${d.cost} supply. Key ${i + 1}` },
         h('span', { class: 'fill' }),
         h('span', { class: 'cost' }, String(d.cost)),
-        c.level > 1 ? h('span', { class: 'lv' }, `L${c.level}`) : null,
+        h('span', { class: 'kind' }, (kindLabel[d.kind] ?? '') + (c.level > 1 ? ` · L${c.level}` : '')),
         h('span', { class: 'nm' }, d.name),
         d.heavy ? h('span', { class: 'lock', hidden: true }, h('span', null, h('span', { class: 'lt' }), h('small', null, 'Clearance'))) : null,
       );
@@ -249,7 +257,7 @@ export function battleScreen(app: App, params: BattleParams): Screen {
     if (picked) { ui.selected = picked.id; ui.inspected = true; openInfo(); }
     else closeInfo();
   };
-  canvas.addEventListener('pointerdown', onCanvasDown);
+  stage.addEventListener('pointerdown', onCanvasDown);
   window.addEventListener('pointermove', onMove);
   window.addEventListener('pointerup', onUp);
   window.addEventListener('pointercancel', onUp);
@@ -366,7 +374,13 @@ export function battleScreen(app: App, params: BattleParams): Screen {
   };
 
   // ---------------------------------------------------------------- loop
-  const fit = () => { const r = stage.getBoundingClientRect(); renderer.fit(r.width, r.height); };
+  const fit = () => {
+    const r = stage.getBoundingClientRect();
+    const top = hud.offsetHeight, bottom = tray.offsetHeight;
+    el.style.setProperty('--hud-h', `${top}px`);
+    el.style.setProperty('--tray-h', `${bottom}px`);
+    view?.fit(r.width, r.height, { top, bottom });
+  };
   const ro = new ResizeObserver(fit);
   ro.observe(stage);
   let lastUnlockAnnounced = false;
@@ -439,16 +453,30 @@ export function battleScreen(app: App, params: BattleParams): Screen {
     battle: b,
     deploy: (i: number, x: number, y: number) => deploy(b, 0, i, x, y),
     ability: (src: number | 'pilot', x?: number, y?: number) => useAbility(b, 0, src, x, y),
+    viewStats: () => (view as any)?.stats?.() ?? null,
+    viewKind: () => view?.kind ?? null,
     finishNow: (win: boolean) => { b.result = { winner: win ? 0 : 1, reason: win ? 'score' : 'core', time: b.t }; },
   };
 
-  requestAnimationFrame(() => { fit(); renderHand(); last = performance.now(); raf = requestAnimationFrame(frame); });
+  renderHand();
+  createBattleView(p.settings.graphics, query.get('render') === '2d').then(v => {
+    if (disposed) { v.dispose(); return; }
+    view = v;
+    stage.prepend(v.el);
+    el.dataset.view = v.kind;
+    v.reset(b.map);
+    fit();
+    last = performance.now();
+    raf = requestAnimationFrame(frame);
+  });
 
   return {
     el,
     back: () => (paused ? resume() : pause()),
     destroy: () => {
+      disposed = true;
       cancelAnimationFrame(raf); ro.disconnect();
+      view?.dispose();
       window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); window.removeEventListener('pointercancel', onUp);
       window.removeEventListener('keydown', onKey); document.removeEventListener('visibilitychange', onVis);
       drag?.ghostEl.remove();
