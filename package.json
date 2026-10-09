@@ -1,0 +1,15 @@
+{
+  "name": "branchlike",
+  "version": "0.1.0",
+  "private": true,
+  "description": "BRANCHLIKE — tactical real-time mech strategy for mobile. Original IP.",
+  "type": "module",
+  "scripts": {
+    "build": "node tools/build.mjs",
+    "test": "node tools/build.mjs --tests && node --test build/tests/*.test.js",
+    "smoke": "node tools/build.mjs && node tools/smoke.mjs",
+    "serve": "node tools/serve.mjs",
+    "sim": "node tools/build.mjs --tests && node build/tools/balance.js"
+  },
+  "license": "UNLICENSED"
+}
