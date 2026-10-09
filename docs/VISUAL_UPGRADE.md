@@ -1,6 +1,20 @@
 # Visual upgrade: 3D isometric battlefield
 
-Status: **phase 1 done** (real-time 3D renderer with original procedural assets). Phase 2 needs approval: see [Decisions needed](#decisions-needed).
+Status: **phase 1 and reference pass done** (real-time 3D renderer with original procedural assets). Phase 2 needs approval: see [Decisions needed](#decisions-needed).
+
+## 0. Reference comparison (Titanfall: Assault screenshot, 8 Oct 2026)
+
+Principles taken from the reference (no art, characters, signage, maps or UI assets copied):
+
+| Principle in the reference | BRANCHLIKE before | Now |
+| --- | --- | --- |
+| Landscape play, camera close, units large | Portrait only, whole field small | Landscape supported: camera moves to the field's side (player left, Halcyon right), tighter framing; portrait kept |
+| The city is the battlefield: streets are lanes, buildings are cover | Open concrete slab, city only at the edges | Cover rebuilt as city buildings inside their collision footprint; asphalt streets, sidewalks, curbs, crosswalks, parking bays, plazas |
+| Bright daylight, saturated accents | Dark, muddy palette | Daylight palettes per district, higher exposure, neon accent strips, lit storefronts, trees |
+| Readable signage and detail | None | Neon signs with BRANCHLIKE's own names (Corsair, Halcyon, Reach Transit, Cinder 24, Union Hall and others) |
+| Hex objective markers | Diamonds | Hex markers, hex hardpoint pads and plazas |
+| Health bars with level badges | Thin bars, pips | Segmented bars (one tick per ~250 health) with a hex level badge for every non-infantry unit |
+| One row of cards, thin HUD | Two-row tray | Landscape: compact single-row tray (106 px on a 390 px-tall phone), thin HUD |
 
 ## 1. Existing architecture (before this upgrade)
 
@@ -20,7 +34,7 @@ Status: **phase 1 done** (real-time 3D renderer with original procedural assets)
 
 | Category | Needed for target quality | Before | Now (phase 1) | Gap remaining |
 | --- | --- | --- | --- | --- |
-| 3D environment | Lit terrain, roads, lane markings, hazard lines | 2D fills | Procedural ground texture (concrete panels, asphalt roads, oil, cracks, hazard bands), terrain plane, fog | Hand-painted or photo-sourced texture set; height variation |
+| 3D environment | Lit terrain, roads, lane markings, hazard lines | 2D fills | Procedural urban ground (asphalt streets, sidewalks with curbs, crosswalks, plazas, parking bays, manholes, hazard bands), terrain, fog | Hand-painted or photo-sourced texture set; height variation |
 | Modular buildings | Futuristic blocks framing the field | None | Procedural city blocks with setbacks, rooftop units, antennas, lit window strips; per-map landmarks (furnace stacks, tanks, floodlight masts) | Authored modular kit with detail and decals |
 | Cover and objectives | Readable cover, hardpoints, bases | Polygons | Themed obstacles per map (rocks, furnace stacks, container stacks, bunkers) matching collision circles; hardpoint pads with pylons, capture arc, beacon column, floating marker; spire towers with rotating turret | Animated capture machinery, destructible cover |
 | Mechs | Original, distinct silhouettes, animated | Flat shapes | Procedural low-poly models: Warden, KESTREL-9 (reverse-joint, wings), MONOLITH (shoulder shields), VESPER (long rail), HALBERD PRIME (four-legged siege frame). Walk cycles, aiming, recoil, drop-in | **Commissioned hero models** with textures, rigs and authored animation |

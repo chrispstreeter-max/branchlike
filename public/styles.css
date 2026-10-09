@@ -259,3 +259,25 @@ input[type=range] { width: 100%; accent-color: var(--union); min-height: 32px; }
 @media (min-height: 760px) { .card { max-height: 124px; } }
 
 .stage .toast { top: calc(var(--hud-h, 52px) + 6px); }
+
+/* ---------- full-width battle and landscape phones ---------- */
+.app.wide { max-width: none; }
+@media (orientation: landscape) and (max-height: 620px) {
+  .hud-top { padding: calc(4px + env(safe-area-inset-top, 0px)) max(12px, env(safe-area-inset-right, 0px)) 10px max(12px, env(safe-area-inset-left, 0px)); min-height: 40px; grid-template-columns: minmax(120px, 220px) auto minmax(120px, 220px) auto; justify-content: space-between; }
+  .side-score .val { font-size: 20px; }
+  .side-score .lbl { font-size: 9px; }
+  .tray { display: grid; grid-template-columns: minmax(170px, 26%) 1fr; grid-template-areas: "supply hand" "abilities hand"; align-items: end; column-gap: 12px; row-gap: 5px; padding: 10px max(12px, env(safe-area-inset-right, 0px)) calc(6px + env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px)); background: linear-gradient(0deg, rgba(8,10,13,.92) 0%, rgba(8,10,13,.75) 65%, rgba(8,10,13,0) 100%); }
+  .tray .supply { grid-area: supply; gap: 6px; }
+  .tray .supply .val { font-size: 18px; }
+  .tray .next { display: none; }
+  .tray .abilities { grid-area: abilities; gap: 4px; }
+  .abtn { min-height: 30px; padding: 2px 8px; }
+  .abtn .who { display: none; }
+  .abtn .an { font-size: 12px; }
+  .tray .hand { grid-area: hand; grid-template-columns: repeat(4, minmax(0, 72px)); justify-content: end; gap: 6px; }
+  .card { max-height: 90px; }
+  .card .nm { font-size: 10px; padding-bottom: 4px; }
+  .card .kind { display: none; }
+  .coach { left: auto; right: 12px; max-width: 46%; }
+  .unit-info { left: auto; right: 12px; width: min(340px, 46%); }
+}

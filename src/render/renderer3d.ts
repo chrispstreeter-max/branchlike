@@ -13,19 +13,12 @@ import { WORLD_W as W, WORLD_H as H, CORE_POS, DEPLOY_LINE, FORWARD_DEPLOY_RADIU
 import { UNITS, ABILITIES } from '../data/units.js';
 import type { BattleView, Overlay } from './view.js';
 import { buildModel, Kit, type ModelSpec } from './models3d.js';
+import { LOOKS, paintGround, buildEnvironment, type MapLook } from './environment3d.js';
 
 type T3 = any;
 const TEAM_HEX = ['#f2a93b', '#9583ff'];
 const TEAM_NUM = [0xf2a93b, 0x9583ff];
 const ENERGY = 0x6fd3ef;
-
-interface MapLook { bg: number; concrete: string; asphalt: string; terrain: number; sun: number; sunI: number; sky: number; groundHemi: number; hemiI: number; accent: string; accentNum: number; building: number[]; windows: number }
-const LOOKS: Record<MapDef['palette'], MapLook> = {
-  dust:    { bg: 0x2c2722, concrete: '#6e665a', asphalt: '#34302b', terrain: 0x332d26, sun: 0xffe0b5, sunI: 2.6, sky: 0xc3ccd8, groundHemi: 0x3d3228, hemiI: 1.15, accent: '#d9a45a', accentNum: 0xffb35a, building: [0x4a443d, 0x57504a, 0x3e3a36, 0x625a50], windows: 0xffc679 },
-  foundry: { bg: 0x1f1713, concrete: '#5d534d', asphalt: '#2c2522', terrain: 0x231a16, sun: 0xffc49a, sunI: 2.1, sky: 0x9aa3b0, groundHemi: 0x2c1b12, hemiI: 1.0, accent: '#ff7a3c', accentNum: 0xff6a2a, building: [0x3f3532, 0x4a3f3a, 0x352d2a, 0x56463e], windows: 0xff8a3c },
-  ice:     { bg: 0x1c242d, concrete: '#76818c', asphalt: '#323b45', terrain: 0x27313b, sun: 0xe2f0ff, sunI: 2.4, sky: 0xd2e4ff, groundHemi: 0x283444, hemiI: 1.2, accent: '#9fd6ff', accentNum: 0x9fd6ff, building: [0x4b5662, 0x58636f, 0x404a55, 0x6a7682], windows: 0xbfe6ff },
-  night:   { bg: 0x10131b, concrete: '#4f5562', asphalt: '#262a33', terrain: 0x161a22, sun: 0xb4c4ff, sunI: 1.7, sky: 0x7a88a8, groundHemi: 0x1a1d26, hemiI: 1.15, accent: '#ffe08a', accentNum: 0xffe08a, building: [0x2b303a, 0x323844, 0x262a33, 0x3a404c], windows: 0xffdc8a },
-};
 
 interface UnitView { root: T3; gun: T3 | null; legs: T3[]; spec: ModelSpec; x: number; y: number; yaw: number; phase: number; recoil: number; seen: boolean; structure: boolean }
 interface PointView { pad: T3; ring: T3; arc: T3; beacon: T3; gem: T3; lastCap: number; lastOwner: Team | null | undefined }
@@ -142,6 +135,8 @@ export class View3D implements BattleView {
   private shake = 0;
   private time = 0;
   private look: MapLook = LOOKS.dust;
+  private nearGroup: T3 = null;
+  private landscape = false;
   private ghost: { id: string; group: T3 } | null = null;
   private ui: Record<string, T3> = {};
   private v: T3;
@@ -272,211 +267,43 @@ export class View3D implements BattleView {
     for (const d of this.decals) d.visible = false;
     this.staticGroup.clear();
     this.scene.background = new T.Color(L.bg);
-    this.scene.fog = new T.Fog(L.bg, 900, 2400);
+    this.scene.fog = new T.Fog(L.bg, L.fogNear, L.fogFar);
     this.hemi.color.setHex(L.sky); this.hemi.groundColor.setHex(L.groundHemi); this.hemi.intensity = L.hemiI;
     this.sun.color.setHex(L.sun); this.sun.intensity = L.sunI;
-    // Ground texture
-    const tex = new T.CanvasTexture(this.paintGround(map));
+    this.gl.toneMappingExposure = L.exposure;
+    // Ground texture: streets, sidewalks, plazas, markings
+    const tex = new T.CanvasTexture(paintGround(map, L, this.quality === 'high' ? 3 : 2));
     tex.colorSpace = T.SRGBColorSpace;
     tex.anisotropy = Math.min(8, this.gl.capabilities.getMaxAnisotropy());
     const gm = this.ground.material;
     gm.map?.dispose(); gm.map = tex; gm.needsUpdate = true;
-    // Outer terrain
-    const terrain = new T.Mesh(new T.PlaneGeometry(3200, 3200), new T.MeshStandardMaterial({ color: L.terrain, roughness: 1 }));
-    terrain.rotation.x = -Math.PI / 2; terrain.position.set(W / 2, -0.6, H / 2);
-    terrain.receiveShadow = this.quality === 'high';
-    this.staticGroup.add(terrain);
-    this.buildCity(map);
-    this.buildObstacles(map);
+    // Buildings, trees, signage and street furniture
+    const env = buildEnvironment(T, map, L, { static: this.mats.static, glow: this.mats.glow }, this.quality === 'high');
+    this.staticGroup.add(env.group, env.nearGroup);
+    this.nearGroup = env.nearGroup;
+    this.nearGroup.visible = !this.landscape;
     this.buildPoints(map);
-  }
-
-  private paintGround(map: MapDef): HTMLCanvasElement {
-    const k = this.quality === 'high' ? 3 : 2;
-    const c = document.createElement('canvas'); c.width = W * k; c.height = H * k;
-    const g = c.getContext('2d')!;
-    g.scale(k, k);
-    const L = this.look;
-    let s = map.id.length * 7919;
-    const rnd = () => { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff; };
-    g.fillStyle = L.concrete; g.fillRect(0, 0, W, H);
-    // Panel variation
-    for (let x = 0; x < W; x += 40) for (let y = 0; y < H; y += 40) {
-      g.fillStyle = rnd() > 0.5 ? 'rgba(255,255,255,0.035)' : 'rgba(0,0,0,0.06)';
-      g.fillRect(x, y, 40, 40);
-    }
-    // Speckle
-    for (let i = 0; i < 5000; i++) { g.fillStyle = `rgba(${rnd() > 0.5 ? '255,255,255' : '0,0,0'},${0.04 + rnd() * 0.06})`; g.fillRect(rnd() * W, rnd() * H, 0.6 + rnd(), 0.6 + rnd()); }
-    // Roads: spire to each hardpoint
-    const road = (team: Team, px: number, py: number) => {
-      const cpos = CORE_POS[team];
-      const mx = (cpos.x + px) / 2, my = (cpos.y + py) / 2 + (team === 0 ? 40 : -40);
-      const path = new Path2D();
-      path.moveTo(cpos.x, cpos.y);
-      path.quadraticCurveTo(px * 0.6 + mx * 0.4, my, px, py);
-      return path;
-    };
-    for (const team of [0, 1] as Team[]) for (const p of map.points) {
-      const path = road(team, p.x, p.y);
-      g.lineCap = 'round';
-      g.strokeStyle = 'rgba(0,0,0,0.35)'; g.lineWidth = 26; g.stroke(path);
-      g.strokeStyle = L.asphalt; g.lineWidth = 22; g.stroke(path);
-      g.strokeStyle = 'rgba(255,255,255,0.18)'; g.lineWidth = 0.8; g.setLineDash([]);
-      g.setLineDash([6, 8]); g.strokeStyle = L.accent; g.globalAlpha = 0.5; g.lineWidth = 1; g.stroke(path); g.globalAlpha = 1; g.setLineDash([]);
-    }
-    // Panel seams
-    g.strokeStyle = 'rgba(0,0,0,0.22)'; g.lineWidth = 0.6;
-    for (let x = 0; x <= W; x += 40) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, H); g.stroke(); }
-    for (let y = 0; y <= H; y += 40) { g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke(); }
-    // Oil stains and cracks
-    for (let i = 0; i < 26; i++) { const x = rnd() * W, y = rnd() * H, r = 4 + rnd() * 14; const gr = g.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, 'rgba(0,0,0,0.25)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(x - r, y - r, r * 2, r * 2); }
-    g.strokeStyle = 'rgba(0,0,0,0.3)'; g.lineWidth = 0.5;
-    for (let i = 0; i < 40; i++) { let x = rnd() * W, y = rnd() * H; g.beginPath(); g.moveTo(x, y); for (let j = 0; j < 5; j++) { x += (rnd() - 0.5) * 14; y += (rnd() - 0.5) * 14; g.lineTo(x, y); } g.stroke(); }
-    // Deploy lines as hazard bands
-    const hazard = (y: number, color: string) => {
-      g.save(); g.beginPath(); g.rect(0, y - 2.5, W, 5); g.clip();
-      g.fillStyle = 'rgba(0,0,0,0.6)'; g.fillRect(0, y - 2.5, W, 5);
-      g.fillStyle = color; for (let x = -10; x < W + 10; x += 10) { g.beginPath(); g.moveTo(x, y + 2.5); g.lineTo(x + 5, y + 2.5); g.lineTo(x + 10, y - 2.5); g.lineTo(x + 5, y - 2.5); g.fill(); }
-      g.restore();
-    };
-    hazard(DEPLOY_LINE[0], TEAM_HEX[0]); hazard(DEPLOY_LINE[1], TEAM_HEX[1]);
-    // Spire pads
-    for (const team of [0, 1] as Team[]) {
-      const { x, y } = CORE_POS[team];
-      g.fillStyle = 'rgba(0,0,0,0.3)'; g.beginPath(); g.arc(x, y, 44, 0, Math.PI * 2); g.fill();
-      g.strokeStyle = TEAM_HEX[team]; g.globalAlpha = 0.6; g.lineWidth = 1.2; g.beginPath(); g.arc(x, y, 42, 0, Math.PI * 2); g.stroke(); g.globalAlpha = 1;
-    }
-    // Hardpoint markings
-    for (const p of map.points) {
-      g.fillStyle = 'rgba(0,0,0,0.35)'; g.beginPath(); g.arc(p.x, p.y, POINT_RADIUS + 4, 0, Math.PI * 2); g.fill();
-      g.strokeStyle = 'rgba(255,255,255,0.25)'; g.lineWidth = 0.8;
-      for (const r of [POINT_RADIUS * 0.45, POINT_RADIUS * 0.75]) { g.beginPath(); g.arc(p.x, p.y, r, 0, Math.PI * 2); g.stroke(); }
-      for (let a = 0; a < 8; a++) { const an = a * Math.PI / 4; g.beginPath(); g.moveTo(p.x + Math.cos(an) * POINT_RADIUS * 0.8, p.y + Math.sin(an) * POINT_RADIUS * 0.8); g.lineTo(p.x + Math.cos(an) * POINT_RADIUS, p.y + Math.sin(an) * POINT_RADIUS); g.stroke(); }
-      g.fillStyle = 'rgba(255,255,255,0.22)'; g.font = '700 16px Bahnschrift, Arial Narrow, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(p.id, p.x, p.y);
-    }
-    // Field edge
-    g.strokeStyle = 'rgba(0,0,0,0.5)'; g.lineWidth = 3; g.strokeRect(0, 0, W, H);
-    return c;
-  }
-
-  private buildCity(map: MapDef) {
-    const T = this.T, L = this.look;
-    const kit = new Kit(T);
-    let s = map.id.length * 104729;
-    const rnd = () => { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff; };
-    const pick = <X>(a: X[]) => a[Math.floor(rnd() * a.length)];
-    // Field curbs and barriers
-    kit.box(4, 3, H, -2, 1.5, H / 2, 0x22262c).box(4, 3, H, W + 2, 1.5, H / 2, 0x22262c);
-    kit.box(W + 8, 3, 4, W / 2, 1.5, -2, 0x22262c).box(W + 8, 3, 4, W / 2, 1.5, H + 2, 0x22262c);
-    for (let z = 20; z < H; z += 46) for (const x of [-12, W + 12]) { kit.cyl(0.8, 0.8, 22, x, 11, z, 0x2a2e35, 5); kit.box(5, 1.2, 2, x + (x < 0 ? 2 : -2), 22, z, 0x2a2e35); kit.box(3, 0.8, 1.6, x + (x < 0 ? 4 : -4), 21.4, z, L.windows, [0, 0, 0], true); }
-    // Building blocks on both flanks and behind the enemy spire
-    const block = (cx: number, cz: number, w: number, d: number, h: number) => {
-      const col = pick(L.building);
-      kit.box(w, h, d, cx, h / 2, cz, col);
-      const tiers = rnd() > 0.5 ? 1 : 0;
-      if (tiers) kit.box(w * 0.65, h * 0.35, d * 0.65, cx + (rnd() - 0.5) * w * 0.2, h + h * 0.175, cz + (rnd() - 0.5) * d * 0.2, col);
-      const top = h + (tiers ? h * 0.35 : 0);
-      kit.box(w * 0.3, 4, d * 0.25, cx - w * 0.15, top + 2, cz, 0x2a2d33);
-      if (rnd() > 0.6) kit.cyl(0.5, 0.5, 18, cx + w * 0.3, top + 9, cz + d * 0.3, 0x2a2d33, 4);
-      // window strips on all four faces
-      const rows = Math.floor(h / 9);
-      for (let r = 1; r < rows; r++) {
-        const y = r * 9;
-        if (rnd() > 0.25) kit.box(w * 0.82, 1.6, 0.4, cx, y, cz + d / 2 + 0.2, L.windows, [0, 0, 0], true);
-        if (rnd() > 0.25) kit.box(w * 0.82, 1.6, 0.4, cx, y, cz - d / 2 - 0.2, L.windows, [0, 0, 0], true);
-        if (rnd() > 0.25) kit.box(0.4, 1.6, d * 0.82, cx + w / 2 + 0.2, y, cz, L.windows, [0, 0, 0], true);
-        if (rnd() > 0.25) kit.box(0.4, 1.6, d * 0.82, cx - w / 2 - 0.2, y, cz, L.windows, [0, 0, 0], true);
-      }
-    };
-    for (const side of [-1, 1]) {
-      for (let z = -120; z < H + 40; z += 0) {
-        const d = 40 + rnd() * 50, w = 40 + rnd() * 50;
-        const cx = side < 0 ? -30 - w / 2 - rnd() * 20 : W + 30 + w / 2 + rnd() * 20;
-        const h = (map.palette === 'foundry' ? 25 : 35) + rnd() * (z < 200 ? 90 : 55);
-        block(cx, z + d / 2, w, d, h);
-        if (rnd() > 0.4) block(cx + side * (w / 2 + 40), z + d / 2, 50 + rnd() * 40, d, h * 1.3);
-        z += d + 10 + rnd() * 20;
-      }
-    }
-    for (let x = -260; x < W + 260; x += 0) { const w = 50 + rnd() * 60; block(x + w / 2, -90 - rnd() * 60, w, 50, 60 + rnd() * 120); x += w + 12; }
-    // Foundry stacks / ice tanks / night masts in the distance
-    if (map.palette === 'foundry') for (const [x, z] of [[-90, 120], [W + 110, 260], [-140, 420], [W + 70, -40]]) { kit.cyl(14, 18, 130, x, 65, z, 0x3a302b, 10); kit.cyl(14.5, 14.5, 4, x, 128, z, L.windows, 10, [0, 0, 0], true); }
-    if (map.palette === 'ice') for (const [x, z] of [[-100, 200], [W + 100, 380]]) { kit.cyl(26, 26, 40, x, 20, z, 0x8a98a6, 12); kit.sphere(26, x, 40, z, 0x9aa8b6); }
-    if (map.palette === 'night') for (const [x, z] of [[-20, 20], [W + 20, 20], [-20, H - 120], [W + 20, H - 120]]) { kit.cyl(1.4, 2, 60, x, 30, z, 0x2a2e35, 6); kit.box(8, 3, 5, x, 61, z, 0x2a2e35); kit.box(7, 1, 4, x, 59.5, z, L.windows, [0, 0, 0], true); }
-    // Props at the deploy edges: crates and barricades
-    for (const [team, zLine] of [[0, DEPLOY_LINE[0] + 26], [1, DEPLOY_LINE[1] - 26]] as [Team, number][]) {
-      for (const x of [14, W - 14]) {
-        kit.box(10, 8, 10, x, 4, zLine, 0x3c4048).box(8, 6, 8, x + (x < W / 2 ? 9 : -9), 3, zLine + 4, team === 0 ? 0x6b5532 : 0x4d4670);
-      }
-    }
-    const b = kit.build();
-    if (b.hull) { const m = new T.Mesh(b.hull, this.mats.static); m.castShadow = this.quality === 'high'; m.receiveShadow = this.quality === 'high'; this.staticGroup.add(m); }
-    if (b.glow) this.staticGroup.add(new T.Mesh(b.glow, this.mats.glow));
-  }
-
-  private buildObstacles(map: MapDef) {
-    const T = this.T;
-    const kit = new Kit(T);
-    let s = map.id.length * 31337;
-    const rnd = () => { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff; };
-    for (const o of map.obstacles) {
-      const r = o.r;
-      switch (map.palette) {
-        case 'dust': {
-          for (let i = 0; i < 4; i++) {
-            const a = rnd() * Math.PI * 2, d = rnd() * r * 0.45, rr = r * (0.45 + rnd() * 0.3);
-            const g = new T.DodecahedronGeometry(rr, 0); g.scale(1, 0.7 + rnd() * 0.5, 1);
-            g.rotateY(rnd() * 3); g.translate(o.x + Math.cos(a) * d, rr * 0.55, o.y + Math.sin(a) * d);
-            kit.geometry(g, [0x6a5f52, 0x5d5347, 0x75695a][i % 3]);
-          }
-          kit.box(r * 1.4, 4, 3, o.x, 2, o.y + r * 0.95, 0x55585c);
-          break;
-        }
-        case 'foundry': {
-          kit.cyl(r * 0.8, r * 0.95, 34, o.x, 17, o.y, 0x4a3d36, 10);
-          kit.cyl(r * 0.82, r * 0.82, 3, o.x, 25, o.y, 0x2a221e, 10);
-          kit.cyl(r * 0.65, r * 0.65, 1.2, o.x, 34.4, o.y, 0xff6a2a, 10, [0, 0, 0], true);
-          kit.box(r * 2, 6, 6, o.x, 3, o.y + r * 0.7, 0x3a3532);
-          break;
-        }
-        case 'ice': {
-          const cols = [0x5a7a99, 0x7a5a52, 0x5b6f5a, 0x8a7a52];
-          kit.box(r * 1.7, 11, r * 0.8, o.x, 5.5, o.y - r * 0.3, cols[Math.floor(rnd() * 4)]);
-          kit.box(r * 1.5, 11, r * 0.8, o.x + 2, 5.5, o.y + r * 0.5, cols[Math.floor(rnd() * 4)]);
-          kit.box(r * 1.4, 11, r * 0.75, o.x - 1, 16.5, o.y + 0.1, cols[Math.floor(rnd() * 4)], [0, 0.15, 0]);
-          kit.box(r * 1.8, 0.8, r * 1.8, o.x, 22.4, o.y, 0xe6eef5);
-          break;
-        }
-        case 'night': {
-          kit.cyl(r * 0.95, r, 10, o.x, 5, o.y, 0x3a3f48, 8);
-          kit.cyl(r * 0.7, r * 0.8, 6, o.x, 13, o.y, 0x30353d, 8);
-          kit.box(r * 1.2, 1, 1.4, o.x, 13, o.y + r * 0.72, 0xffe08a, [0, 0, 0], true);
-          break;
-        }
-      }
-    }
-    const b = kit.build();
-    if (b.hull) { const m = new T.Mesh(b.hull, this.mats.static); m.castShadow = this.quality === 'high'; m.receiveShadow = this.quality === 'high'; this.staticGroup.add(m); }
-    if (b.glow) this.staticGroup.add(new T.Mesh(b.glow, this.mats.glow));
   }
 
   private buildPoints(map: MapDef) {
     const T = this.T;
     for (const p of map.points) {
       const padKit = new Kit(T);
-      padKit.cyl(POINT_RADIUS + 3, POINT_RADIUS + 5, 1.6, 0, 0.8, 0, 0x2b3037, 24);
+      padKit.cyl(POINT_RADIUS + 4, POINT_RADIUS + 6, 1.6, 0, 0.8, 0, 0x3a4048, 6, [0, Math.PI / 6, 0]);
+      padKit.cyl(POINT_RADIUS + 2, POINT_RADIUS + 2, 0.4, 0, 1.75, 0, 0x2a2f36, 6, [0, Math.PI / 6, 0]);
       for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + Math.PI / 4; padKit.box(4, 9, 4, Math.cos(a) * (POINT_RADIUS + 2), 4.5, Math.sin(a) * (POINT_RADIUS + 2), 0x3a4048); }
       padKit.cyl(2.2, 3, 30, 0, 15, 0, 0x30353d, 6);
       const b = padKit.build();
       const pad = new T.Mesh(b.hull, this.mats.static); pad.position.set(p.x, 0, p.y); pad.castShadow = this.quality === 'high'; pad.receiveShadow = this.quality === 'high';
-      const ring = new T.Mesh(this.ringGeo((POINT_RADIUS - 1.5) / POINT_RADIUS, 1, 64), new T.MeshBasicMaterial({ color: 0x8b95a1, transparent: true, opacity: 0.55, depthWrite: false, toneMapped: false }));
-      ring.scale.setScalar(POINT_RADIUS); ring.position.set(p.x, 1.8, p.y);
+      const ringGeo = new T.RingGeometry((POINT_RADIUS - 1.8) / POINT_RADIUS, 1, 6); ringGeo.rotateZ(Math.PI / 6); ringGeo.rotateX(-Math.PI / 2);
+      const ring = new T.Mesh(ringGeo, new T.MeshBasicMaterial({ color: 0x8b95a1, transparent: true, opacity: 0.55, depthWrite: false, toneMapped: false }));
+      ring.scale.setScalar(POINT_RADIUS + 3); ring.position.set(p.x, 2, p.y);
       const arc = new T.Mesh(new T.BufferGeometry(), new T.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95, depthWrite: false, toneMapped: false, side: T.DoubleSide }));
       arc.position.set(p.x, 1.9, p.y);
       const beaconGeo = new T.CylinderGeometry(2.2, 5, 120, 10, 1, true); beaconGeo.translate(0, 60, 0);
       const beacon = new T.Mesh(beaconGeo, new T.MeshBasicMaterial({ color: 0x8b95a1, transparent: true, opacity: 0.12, depthWrite: false, blending: T.AdditiveBlending, side: T.DoubleSide, toneMapped: false }));
       beacon.position.set(p.x, 30, p.y);
-      const gem = new T.Mesh(new T.OctahedronGeometry(4.5, 0), new T.MeshStandardMaterial({ color: 0x8b95a1, emissive: 0x8b95a1, emissiveIntensity: 0.6, flatShading: true, roughness: 0.3 }));
+      const gem = new T.Mesh(new T.CylinderGeometry(5.5, 5.5, 3, 6), new T.MeshStandardMaterial({ color: 0x8b95a1, emissive: 0x8b95a1, emissiveIntensity: 0.6, flatShading: true, roughness: 0.3 }));
       gem.position.set(p.x, 38, p.y);
       this.scene.add(pad, ring, arc, beacon, gem);
       this.points.push({ pad, ring, arc, beacon, gem, lastCap: NaN, lastOwner: undefined });
@@ -498,11 +325,22 @@ export class View3D implements BattleView {
     cam.aspect = this.cssW / this.cssH;
     cam.clearViewOffset();
     cam.updateProjectionMatrix();
-    const el = 50 * Math.PI / 180;
-    const dir = new T.Vector3(0, Math.sin(el), Math.cos(el));
-    // Width is fitted a little above the near edge, so the player's back corners may crop slightly.
-    const wide = [[0, 0, 0], [W, 0, 0], [0, 0, H - 110], [W, 0, H - 110]].map(([x, y, z]) => new T.Vector3(x, y, z));
-    const tall = [[W / 2, 0, H], [W / 2, 66, CORE_POS[1].y - 30], [W / 2, 0, 0]].map(([x, y, z]) => new T.Vector3(x, y, z));
+    // Portrait: camera behind the player's spire looking up the field.
+    // Landscape: camera on the field's east side, so the player is on the left and Halcyon on the right.
+    this.landscape = this.cssW > this.cssH * 1.05;
+    if (this.nearGroup) this.nearGroup.visible = !this.landscape;
+    // Keep the sun on the camera's side so building faces toward the player are lit.
+    this.sun.position.copy(this.target).add(this.landscape ? new T.Vector3(210, 430, 160) : new T.Vector3(-230, 430, 170));
+    const el = (this.landscape ? 54 : 50) * Math.PI / 180;
+    const dir = this.landscape ? new T.Vector3(Math.cos(el), Math.sin(el), 0) : new T.Vector3(0, Math.sin(el), Math.cos(el));
+    const V = (a: number[][]) => a.map(([x, y, z]) => new T.Vector3(x, y, z));
+    // Fitting points. The near edge may crop slightly so units stay large.
+    const wide = this.landscape
+      ? V([[0, 0, 4], [0, 0, H - 4], [W - 40, 0, 4], [W - 40, 0, H - 4]])
+      : V([[0, 0, 0], [W, 0, 0], [0, 0, H - 110], [W, 0, H - 110]]);
+    const tall = this.landscape
+      ? V([[W - 50, 0, H / 2], [14, 0, H / 2], [W / 2, 66, CORE_POS[1].y]])
+      : V([[W / 2, 0, H], [W / 2, 66, CORE_POS[1].y - 30], [W / 2, 0, 0]]);
     const regionH = Math.max(0.2, (this.cssH - insets.top - insets.bottom) / this.cssH * 2);
     const measure = (dist: number) => {
       cam.position.copy(this.target).addScaledVector(dir, dist);
@@ -917,32 +755,45 @@ export class View3D implements BattleView {
     for (const e of b.ents) {
       const v = this.units.get(e.id); if (!v) continue;
       const d = e.def;
-      const always = d.kind === 'core' || d.kind === 'boss' || d.hero;
-      if (!always && e.hp >= e.maxHp - 0.5 && e.aegis <= 0 && e.stun <= 0) continue;
+      // Infantry bars appear only when damaged; everything else always shows a bar with its level.
+      if (d.kind === 'infantry' && e.hp >= e.maxHp - 0.5 && e.aegis <= 0 && e.stun <= 0) continue;
       const p = this.screen(v.x, v.root.position.y + v.spec.height + 5, v.y);
       if (p.z > 1) continue;
-      const w = d.kind === 'core' ? 54 : d.kind === 'boss' ? 64 : d.hero ? 36 : d.kind === 'mech' ? 28 : d.kind === 'infantry' ? 12 : 20;
-      const hgt = d.kind === 'core' || d.kind === 'boss' || d.hero ? 5 : 3;
+      const big = d.kind === 'core' || d.kind === 'boss';
+      const w = big ? 56 : d.hero ? 40 : d.kind === 'mech' ? 32 : d.kind === 'infantry' ? 12 : 24;
+      const hgt = big || d.hero ? 5 : d.kind === 'infantry' ? 2.5 : 4;
       const frac = Math.max(0, e.hp / e.maxHp);
-      g.fillStyle = 'rgba(8,10,13,0.85)'; g.fillRect(p.sx - w / 2 - 1, p.sy - 1, w + 2, hgt + 2);
-      g.fillStyle = frac < 0.3 ? '#ff6158' : TEAM_HEX[e.team]; g.fillRect(p.sx - w / 2, p.sy, w * frac, hgt);
+      const col = TEAM_HEX[e.team];
+      const x0 = p.sx - w / 2 + (d.kind === 'infantry' ? 0 : 6);
+      g.fillStyle = 'rgba(8,10,13,0.88)'; g.fillRect(x0 - 1, p.sy - 1, w + 2, hgt + 2);
+      g.fillStyle = frac < 0.3 ? '#ff6158' : col; g.fillRect(x0, p.sy, w * frac, hgt);
+      // Segment ticks: one per ~250 health, so big units read as big
+      const segs = Math.max(2, Math.min(14, Math.round(e.maxHp / 250)));
+      if (d.kind !== 'infantry') { g.fillStyle = 'rgba(8,10,13,0.9)'; for (let i = 1; i < segs; i++) g.fillRect(x0 + w * i / segs - 0.5, p.sy, 1, hgt); }
+      // Level badge (hexagon) for everything except infantry
+      if (d.kind !== 'infantry') {
+        const r = big || d.hero ? 7.5 : 6, cx = x0 - r - 1, cy = p.sy + hgt / 2;
+        g.beginPath(); for (let i = 0; i < 6; i++) { const an = Math.PI / 6 + i * Math.PI / 3; i ? g.lineTo(cx + Math.cos(an) * r, cy + Math.sin(an) * r) : g.moveTo(cx + Math.cos(an) * r, cy + Math.sin(an) * r); } g.closePath();
+        g.fillStyle = 'rgba(8,10,13,0.92)'; g.fill(); g.strokeStyle = col; g.lineWidth = 1.4; g.stroke();
+        g.fillStyle = col; g.font = `700 ${r + 2}px Bahnschrift, "Arial Narrow", sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+        g.fillText(d.kind === 'core' ? '◆' : String(e.level), cx, cy + 0.5);
+      }
       if (d.hero || d.kind === 'boss') {
         g.font = '700 10px Bahnschrift, "Arial Narrow", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'bottom';
-        g.fillStyle = 'rgba(8,10,13,0.7)'; const tw = g.measureText(d.name).width; g.fillRect(p.sx - tw / 2 - 3, p.sy - 13, tw + 6, 11);
-        g.fillStyle = TEAM_HEX[e.team]; g.fillText(d.name, p.sx, p.sy - 2.5);
+        g.fillStyle = 'rgba(8,10,13,0.7)'; const tw = g.measureText(d.name).width; g.fillRect(x0 + w / 2 - tw / 2 - 3, p.sy - 13, tw + 6, 11);
+        g.fillStyle = col; g.fillText(d.name, x0 + w / 2, p.sy - 2.5);
       }
-      if (e.level > 1 && d.kind !== 'core') { g.fillStyle = '#e7eaed'; for (let i = 0; i < e.level - 1; i++) g.fillRect(p.sx + w / 2 + 2, p.sy + hgt - 2 - i * 3, 2, 2); }
       if (e.stun > 0) { g.strokeStyle = '#6fd3ef'; g.lineWidth = 1.4; g.beginPath(); for (let i = 0; i < 5; i++) g.lineTo(p.sx - 8 + i * 4, p.sy - 6 + (i % 2 ? -3 : 3)); g.stroke(); }
       if (e.aegis > 0) { const c = this.screen(v.x, v.spec.height * 0.5, v.y); g.strokeStyle = 'rgba(111,211,239,0.8)'; g.fillStyle = 'rgba(111,211,239,0.12)'; g.lineWidth = 1.2; g.beginPath(); g.arc(c.sx, c.sy, Math.max(12, d.radius * 1.6), 0, Math.PI * 2); g.fill(); g.stroke(); }
     }
-    // Hardpoint flags
+    // Hardpoint markers: hexagon badges with capture progress
     for (const p of b.points) {
-      const s = this.screen(p.x, 52, p.y);
-      const c = p.owner !== null ? TEAM_HEX[p.owner] : '#aab3bd';
-      g.fillStyle = 'rgba(8,10,13,0.82)'; g.strokeStyle = c; g.lineWidth = 1.6;
-      g.beginPath(); g.moveTo(s.sx, s.sy - 12); g.lineTo(s.sx + 12, s.sy); g.lineTo(s.sx, s.sy + 12); g.lineTo(s.sx - 12, s.sy); g.closePath(); g.fill(); g.stroke();
-      if (Math.abs(p.cap) > 0.5 && Math.abs(p.cap) < 100) { g.strokeStyle = p.cap > 0 ? TEAM_HEX[0] : TEAM_HEX[1]; g.lineWidth = 2.5; g.beginPath(); g.arc(s.sx, s.sy, 16, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.abs(p.cap) / 100); g.stroke(); }
-      g.fillStyle = c; g.font = '700 13px Bahnschrift, "Arial Narrow", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(p.id, s.sx, s.sy + 0.5);
+      const s = this.screen(p.x, 50, p.y);
+      const c = p.owner !== null ? TEAM_HEX[p.owner] : '#c4ccd4';
+      const hexPath = (r: number) => { g.beginPath(); for (let i = 0; i < 6; i++) { const an = Math.PI / 6 + i * Math.PI / 3; i ? g.lineTo(s.sx + Math.cos(an) * r, s.sy + Math.sin(an) * r) : g.moveTo(s.sx + Math.cos(an) * r, s.sy + Math.sin(an) * r); } g.closePath(); };
+      hexPath(15); g.fillStyle = 'rgba(8,10,13,0.82)'; g.fill(); g.strokeStyle = c; g.lineWidth = 2; g.stroke();
+      if (Math.abs(p.cap) > 0.5 && Math.abs(p.cap) < 100) { g.strokeStyle = p.cap > 0 ? TEAM_HEX[0] : TEAM_HEX[1]; g.lineWidth = 3; g.beginPath(); g.arc(s.sx, s.sy, 19, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.abs(p.cap) / 100); g.stroke(); }
+      g.fillStyle = c; g.font = '700 15px Bahnschrift, "Arial Narrow", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(p.id, s.sx, s.sy + 0.5);
     }
     // Selected unit target line
     if (o.selectedId) {

@@ -36,6 +36,7 @@ export function battleScreen(app: App, params: BattleParams): Screen {
   const b: Battle = createBattle({ mission, seed, player: { deck: deckCards(p), pilot: p.pilot }, enemy: { deck: enemyDeckFor(mission), pilot: mission.enemyPilot } });
   const ai: AiState = createAi(b, 1, params.difficulty);
   app.audio.intensity = 1;
+  app.root.classList.add('wide'); // battles use the full screen width, including landscape
 
   // ---------------------------------------------------------------- DOM
   // The view (3D, or 2D fallback) loads asynchronously; until then these calls are no-ops.
@@ -475,6 +476,7 @@ export function battleScreen(app: App, params: BattleParams): Screen {
     back: () => (paused ? resume() : pause()),
     destroy: () => {
       disposed = true;
+      app.root.classList.remove('wide');
       cancelAnimationFrame(raf); ro.disconnect();
       view?.dispose();
       window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); window.removeEventListener('pointercancel', onUp);

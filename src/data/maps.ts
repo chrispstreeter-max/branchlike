@@ -12,7 +12,7 @@ export const POINT_RADIUS = 32;
 export const MAPS: Record<string, MapDef> = {
   relay_ridge: {
     id: 'relay_ridge', name: 'Relay Ridge', palette: 'dust',
-    desc: 'Three relay masts on a dry ridge. Rock spurs funnel traffic into the lanes.',
+    desc: 'A hillside transit district under three relay masts. Office blocks split the streets into lanes.',
     points: [{ id: 'A', x: 66, y: 322 }, { id: 'B', x: 180, y: 314 }, { id: 'C', x: 294, y: 322 }],
     obstacles: [{ x: 124, y: 236, r: 24 }, { x: 236, y: 236, r: 24 }, { x: 124, y: 404, r: 24 }, { x: 236, y: 404, r: 24 }],
   },

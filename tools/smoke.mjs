@@ -169,6 +169,14 @@ try {
   const stats = await page.evaluate(() => globalThis.__branchlike.viewStats());
   check(stats && stats.calls < 250, `draw calls within mobile budget (${stats && stats.calls})`);
 
+  // Landscape phone: the 3D view re-fits with the camera on the side and the compact tray
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.waitForTimeout(1500);
+  await shot('17-battle-landscape');
+  const land = await page.evaluate(() => ({ tray: document.querySelector('.tray').offsetHeight, w: document.documentElement.scrollWidth - innerWidth }));
+  check(land.tray <= 130 && land.w <= 0, `landscape layout is compact (tray ${land.tray}px)`);
+  await page.setViewportSize({ width: 390, height: 844 });
+
   // 2D fallback renderer still works
   await page.goto(`http://localhost:${PORT}/index.html?debug=1&render=2d`);
   await page.click('.title-foot .btn');

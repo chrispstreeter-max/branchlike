@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.0 — Reference pass: urban battlefield and landscape
+
+### Added
+- Landscape support: on a landscape screen the camera moves to the side of the field (player left, Halcyon right) with tighter framing, and the HUD and card tray become a compact single row. Portrait still works.
+- Urban battlefields (`src/render/environment3d.ts`): cover is now city buildings built inside each collision footprint, with window bands, cornices, rooftop plant, water tanks, antennas, neon corner strips, lit storefronts and neon signs using BRANCHLIKE names. Streets, sidewalks, curbs, crosswalks, plazas and parking bays painted on the ground; trees and street lights; district landmarks (relay masts, furnace stacks, tanks, floodlights).
+- Brighter daylight lighting per district, with the sun kept on the camera's side.
+- Hex hardpoint pads, hex markers with capture progress, segmented health bars with hex level badges on every non-infantry unit.
+
+### Unchanged
+- Gameplay, AI, progression and saves. Collision shapes are the same; only their visuals changed.
+
 ## 0.2.0 — 3D battlefield (visual upgrade, phase 1)
 
 ### Added
