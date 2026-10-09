@@ -1,0 +1,10 @@
+{
+  "name": "BRANCHLIKE",
+  "short_name": "BRANCHLIKE",
+  "description": "Tactical real-time mech strategy.",
+  "start_url": "./index.html",
+  "display": "fullscreen",
+  "orientation": "portrait",
+  "background_color": "#0c0f13",
+  "theme_color": "#0c0f13"
+}
