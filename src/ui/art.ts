@@ -45,6 +45,12 @@ export function unitArt(id: string, c = UNION): string {
     case 'halberd_prime':
       body = `${shadow}<rect x="16" y="60" width="22" height="30" fill="${dk}"/><rect x="62" y="60" width="22" height="30" fill="${dk}"/><rect x="10" y="16" width="80" height="48" rx="4" fill="${d}"/><rect x="10" y="16" width="80" height="12" fill="${c}"/><rect x="20" y="4" width="14" height="20" fill="${shade(c, .6)}"/><rect x="66" y="4" width="14" height="20" fill="${shade(c, .6)}"/><rect x="36" y="34" width="28" height="7" fill="#ff6158"/>`;
       break;
+    case 'missile_strike':
+      body = `<circle cx="50" cy="78" r="16" fill="none" stroke="#ff6158" stroke-width="3"/><circle cx="50" cy="78" r="4" fill="#ff6158"/><g transform="rotate(35 50 40)"><rect x="44" y="6" width="12" height="46" rx="6" fill="${lt}"/><path d="M44 46 L36 58 L44 54 Z M56 46 L64 58 L56 54 Z" fill="${c}"/><rect x="44" y="20" width="12" height="4" fill="${c}"/><path d="M47 52 L50 66 L53 52 Z" fill="#ffb36b"/></g>`;
+      break;
+    case 'supply_depot':
+      body = `${shadow}<rect x="16" y="70" width="68" height="12" fill="${dk}"/><rect x="20" y="46" width="28" height="24" fill="${d}"/><rect x="52" y="46" width="28" height="24" fill="${c}"/><rect x="36" y="24" width="28" height="22" fill="${d}"/><rect x="47" y="10" width="6" height="16" fill="#6fd3ef"/>`;
+      break;
     case 'core':
       body = `${shadow}<path d="M50 6 L64 26 L64 86 L36 86 L36 26 Z" fill="${d}"/><path d="M50 6 L64 26 L36 26 Z" fill="${c}"/><rect x="44" y="40" width="12" height="4" fill="${lt}"/>`;
       break;

@@ -74,11 +74,28 @@ try {
   const after = await page.evaluate(() => globalThis.__branchlike.battle.sides[0].stats.deployed);
   check(after === before + 1, 'drag-and-drop deploys a unit');
 
-  // Tap card, then tap an invalid spot: should be rejected with a message.
-  await page.click('.hand .card:not(.poor)');
-  await page.mouse.click(cv.x + cv.width * 0.5, cv.y + cv.height * 0.25);
+  // Tap card, then tap deep in enemy territory: it drops at our line with a rally point there.
+  await page.evaluate(() => { globalThis.__branchlike.battle.sides[0].supply = 10; });
+  const before2 = await page.evaluate(() => globalThis.__branchlike.battle.sides[0].stats.deployed);
+  await page.waitForTimeout(100);
+  await page.click('.hand .card:not([data-kind=mech]):not([data-kind=hero]):not([data-kind=structure]):not([data-kind=strike])');
+  await page.mouse.click(cv.x + cv.width * 0.5, cv.y + cv.height * 0.3);
+  await page.waitForFunction(n => globalThis.__branchlike.battle.sides[0].stats.deployed > n, before2, { timeout: 3000 }).catch(() => {});
+  const rallied = await page.evaluate(() => {
+    const b = globalThis.__branchlike.battle;
+    return { n: b.sides[0].stats.deployed, rally: b.ents.some(e => e.team === 0 && e.rally) };
+  });
+  check(rallied.n === before2 + 1 && rallied.rally, `tap on enemy ground deploys with a rally point`);
+
+  // Tap card, then tap outside the battlefield: rejected with a message.
+  await page.evaluate(() => { globalThis.__branchlike.battle.sides[0].supply = 10; });
+  await page.waitForTimeout(100);
+  await page.click('.hand .card:not([data-kind=mech]):not([data-kind=hero])');
+  const before3 = await page.evaluate(() => globalThis.__branchlike.battle.sides[0].stats.deployed);
+  await page.mouse.click(cv.x + 4, cv.y + 4);
   await page.waitForTimeout(150);
-  check(await page.isVisible('.stage .toast.bad'), 'invalid deploy shows an error toast');
+  const after3 = await page.evaluate(() => globalThis.__branchlike.battle.sides[0].stats.deployed);
+  check(after3 === before3 && await page.isVisible('.stage .toast.bad'), 'tap outside the field is rejected with an error toast');
   await page.keyboard.press('Escape');
 
   // Let the battle run, then use the pilot ability.

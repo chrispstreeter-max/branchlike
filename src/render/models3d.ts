@@ -306,6 +306,17 @@ export function buildModel(T: T3, id: string, team: 0 | 1): ModelSpec {
       muzzle = [30, 32, 0];
       break;
 
+    case 'supply_depot':
+      height = 16;
+      k.box(16, 3, 14, 0, 1.5, 0, P.dark);
+      for (const [x, z] of [[-4, -3], [4, -3], [-4, 4], [4, 4]]) k.box(6.5, 6, 6, x, 6, z, x < 0 ? P.secondary : P.primary);
+      k.box(6, 5, 6, 0, 11.5, 0.5, P.secondary);
+      k.box(1, 4, 1, 0, 16, 0.5, P.energy, [0, 0, 0], true);
+      k.cyl(0.25, 0.25, 8, 6.5, 7, -5.5, P.dark, 4);
+      k.box(1, 1, 1, 6.5, 11.5, -5.5, P.glow, [0, 0, 0], true);
+      muzzle = [0, 10, 0];
+      break;
+
     case 'core':
       height = 64;
       k.cyl(30, 34, 6, 0, 3, 0, P.dark, 8);

@@ -29,10 +29,12 @@ Short, tactical, real-time battles on a phone. Two commanders drop units onto a 
 
 1. Review the battlefield and the hand of 4 cards (from an 8-card squad).
 2. Supply regenerates at 1 per 1.4 s, up to 10. Each card costs supply.
-3. Deploy below your line, or beside a hardpoint you fully hold (forward deployment).
+3. Drag a card to where you want the unit to go. It drops at your line (or beside a hardpoint you fully hold) and moves to that **rally point**. Aim behind the line to drop exactly there. Strike cards land exactly where you aim, anywhere on the field.
 4. Units pick targets and objectives automatically.
 5. Fire pilot and hero abilities at the right moment.
 6. Win by objective or by destroying the enemy spire.
+
+Artillery and marksman units (Mortar Crawler, VESPER) **hold at their rally point**; everything else resumes its normal orders on arrival. Frames and heroes **march down their lane on the enemy spire**, fighting whatever they meet, and they arrive by **frame-fall** from orbit. In the **final minute** supply production doubles (except in defend missions).
 
 Heavy cards (frames and heroes) need **frame clearance**, which arrives partway into a mission (shown on the card and the briefing). Heroes are unique on the field.
 
@@ -72,12 +74,31 @@ Damage type × armour class multipliers (`src/data/units.ts`):
 | Mortar Crawler | 4 | Artillery | Clumped infantry, structures | Drones, anything inside its blind spot |
 | Mender Rig | 3 | Support | Sustains frames | Focus fire |
 | Bastion Turret | 4 | Temporary structure | Holds a point ~1 min | Mortars, Breakers |
+| Missile Strike | 2 | Strike card | Lands anywhere; clumped infantry, structures | Can't hit drones |
+| Supply Depot | 3 | Economy structure | +15% supply for ~2 min | Anything that reaches it |
 | Warden Frame | 6 | Line mech | Infantry | Breakers, MONOLITH, VESPER |
 | KESTREL-9 | 7 | Hero skirmisher | Everything; Rocket Salvo vs clumps | Breakers |
 | MONOLITH | 8 | Hero juggernaut | Armour; Aegis Dome | Drones (can't hit air) |
 | VESPER | 7 | Hero marksman | Armour at range; Rail Lance lines | Drones, rush |
 
 Design rule: a heavy unit must never automatically beat the same supply of its counter. This is enforced by an automated test (Warden vs 2 Breaker Teams).
+
+## 6b. Reference: Titanfall: Assault gameplay principles
+
+Gathered from gameplay-video write-ups, reviews, card guides and the community wiki (October 2026). Used as genre principles only.
+
+| Principle | BRANCHLIKE |
+| --- | --- |
+| Drop and rally point: drag a card to where the unit should go | Done (0.4) |
+| Heavy units march on the enemy base | Done (0.4) |
+| Frantic final minute with faster resource generation | Done (0.4): supply doubles in the last 60 s |
+| One-shot strike cards and economy structures | Done (0.4): Missile Strike, Supply Depot |
+| Units with rally effects hold their ground | Done (0.4): Mortar Crawler, VESPER |
+| Capture effects (reinforcements on capture), deploy effects, death effects | Backlog |
+| Pilots that cross terrain (wall-running) | Backlog |
+| Maps that change during play | Backlog |
+| Squad of 10 (3 pilots, 3 titans, 4 burn cards) | Different by design: 8-card squad, any mix |
+| Ranked ladder, caches, card rarity, guilds | Out of scope for the offline single-player slice |
 
 ## 7. Abilities
 

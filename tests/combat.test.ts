@@ -251,3 +251,80 @@ test('full AI-vs-AI battles always finish on every mission', () => {
     assert.ok(b.sides[0].stats.deployed > 3 && b.sides[1].stats.deployed > 3, `${m.id}: both sides should deploy`);
   }
 });
+
+// ---------------------------------------------------------------- rally points, strikes, surge, depots
+
+import { deployTo, resolveDrop, supplyRate, SURGE_MULTIPLIER } from '../src/sim/battle.js';
+
+test('aiming past the deploy line drops at the line and sets a rally point', () => {
+  const b = battle();
+  const r = resolveDrop(b, 0, 'rifle_squad', 300, 300);
+  assert.ok(r.y >= 440, 'drops inside the zone');
+  assert.deepEqual(r.rally, { x: 300, y: 300 });
+  const inside = resolveDrop(b, 0, 'rifle_squad', 100, 520);
+  assert.equal(inside.rally, null, 'aiming inside the zone drops right there');
+  assert.deepEqual([inside.x, inside.y], [100, 520]);
+});
+
+test('units walk to their rally point; rally holders stay there', () => {
+  const b = battle({}, 3, ['mortar_crawler', 'mortar_crawler', 'hound_apc', 'hound_apc', 'rifle_squad', 'rifle_squad', 'wasp_drone', 'wasp_drone']);
+  for (const e of b.ents) if (e.def.kind === 'core') e.hp = 1e9;
+  b.sides[0].supply = 10;
+  forceHand(b, 0, 'mortar_crawler');
+  assert.equal(deployTo(b, 0, 0, 60, 380), null);
+  const m = b.ents.find(e => e.def.id === 'mortar_crawler')!;
+  assert.deepEqual(m.rally, { x: 60, y: 380 });
+  runFor(b, 30);
+  assert.ok(Math.hypot(m.x - 60, m.y - 380) < 14, `mortar holds at rally (at ${m.x.toFixed(0)},${m.y.toFixed(0)})`);
+  // A non-holder clears its rally on arrival and resumes normal orders.
+  b.sides[0].supply = 10;
+  forceHand(b, 0, 'hound_apc');
+  deployTo(b, 0, 0, 300, 420);
+  const h = b.ents.find(e => e.def.id === 'hound_apc')!;
+  runFor(b, 12);
+  assert.equal(h.rally, null);
+});
+
+test('missile strike lands anywhere, damages the area and spawns no unit', () => {
+  const b = battle({}, 1, [...STD.slice(0, 7), 'missile_strike']);
+  b.sides[1].supply = 10; forceHand(b, 1, 'rifle_squad'); deploy(b, 1, 0, 180, 150);
+  const foes = b.ents.filter(e => e.team === 1 && e.def.id === 'rifle_squad');
+  b.sides[0].supply = 10;
+  forceHand(b, 0, 'missile_strike');
+  const before = b.ents.length;
+  assert.equal(deployTo(b, 0, 0, 180, 152), null);
+  assert.equal(b.ents.length, before, 'no entity spawned');
+  for (const f of foes) { f.x = 180 + (f.x - 180) * 0.2; f.y = 152; }
+  const hp0 = foes.map(f => f.hp);
+  for (let i = 0; i < 20; i++) { for (const f of foes) { f.x = 180; f.y = 152; } step(b); }
+  assert.ok(foes.every((f, i) => f.hp < hp0[i]), 'all troopers in the blast were hit');
+});
+
+test('final minute doubles supply production (not in defend missions)', () => {
+  const b = battle({ timeLimit: 70 });
+  const r0 = supplyRate(b, 0);
+  runFor(b, 11);
+  assert.ok(b.surge);
+  assert.ok(Math.abs(supplyRate(b, 0) - r0 * SURGE_MULTIPLIER) < 1e-9);
+  const d = createBattle({ mission: { ...MISSIONS.find(m => m.mode === 'defend')!, timeLimit: 70 }, seed: 1, player: { deck: deckOf(STD), pilot: null }, enemy: { deck: deckOf(STD), pilot: null } });
+  runFor(d, 11);
+  assert.equal(d.surge, false);
+});
+
+test('supply depot raises supply regeneration while it stands', () => {
+  const b = battle({}, 1, [...STD.slice(0, 7), 'supply_depot']);
+  const r0 = supplyRate(b, 0);
+  b.sides[0].supply = 10; forceHand(b, 0, 'supply_depot'); deploy(b, 0, 0, 60, 560);
+  assert.ok(Math.abs(supplyRate(b, 0) - r0 * 1.15) < 1e-9);
+  b.ents.find(e => e.def.id === 'supply_depot')!.hp = 0; step(b);
+  assert.ok(Math.abs(supplyRate(b, 0) - r0) < 1e-9);
+});
+
+test('frames march down their lane toward the enemy spire', () => {
+  const b = battle();
+  for (const e of b.ents) if (e.def.kind === 'core') e.hp = 1e9;
+  b.sides[0].supply = 10; forceHand(b, 0, 'warden_frame'); deploy(b, 0, 0, 180, 500);
+  const w = b.ents.find(e => e.def.id === 'warden_frame')!;
+  runFor(b, 30);
+  assert.ok(w.y < 260, `warden advanced past the hardpoints (y=${w.y.toFixed(0)})`);
+});

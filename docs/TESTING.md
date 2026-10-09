@@ -20,6 +20,8 @@
 - Pilot and hero abilities: cooldowns, targeting, range, EMP radius and spire immunity.
 - Determinism: same seed gives an identical battle; different seed differs.
 - Every mission runs to completion in AI-vs-AI with both sides deploying.
+- Drop and rally: aiming past the line drops at the nearest legal spot and sets a rally point; rally holders stay, others resume orders on arrival.
+- Missile Strike damage and placement anywhere; final-minute supply surge; Supply Depot boost; frames march on the enemy spire.
 
 ### `tests/ai.test.ts`
 
@@ -27,7 +29,7 @@
 - Elite beats Recruit in mirror matches from either side.
 - Higher difficulty makes more decisions.
 - The AI deploys to defend a threatened spire.
-- The AI over-picks anti-armour against an armour-heavy opponent.
+- The AI plays anti-armour more often against an armour-heavy opponent than against infantry (16 seeds).
 - The AI can never spend supply it doesn't have.
 
 ### `tests/progression.test.ts`
@@ -41,7 +43,7 @@
 
 ### `tools/smoke.mjs`
 
-Title → menu → campaign (5 locked missions) → briefing → battle with tutorial → drag-and-drop deploy → invalid tap rejected with a message → pilot ability → pause and resume → forced win → results and rewards → reload keeps progress without paying twice → hangar upgrade → pilots → squad remove/add/save validation → settings persist → profile → second mission launches. Also checks for horizontal overflow on each screen and fails on any console error.
+Title → menu → campaign (5 locked missions) → briefing → battle with tutorial → drag-and-drop deploy → tap on enemy ground deploys with a rally point → tap outside the field rejected with a message → pilot ability → pause and resume → forced win → results and rewards → reload keeps progress without paying twice → hangar upgrade → pilots → squad remove/add/save validation → settings persist → profile → second mission launches → 3D draw-call budget → landscape layout → 2D fallback. Also checks for horizontal overflow on each screen and fails on any console error.
 
 ## Manual checklist (per release)
 

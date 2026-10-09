@@ -40,7 +40,7 @@ export const UNITS: Record<string, UnitDef> = {
     desc: 'Tracked mortar. Lobs shells over cover from long range. Has a blind spot up close.',
     kind: 'vehicle', cost: 4, hp: 260, armor: 'armored', speed: 18, radius: 10, height: 11, capture: 0,
     weapon: { type: 'explosive', damage: 34, range: 178, minRange: 52, splash: 22, cooldown: 3.0, hitsAir: false, shellTime: 0.8 },
-    deployable: true,
+    deployable: true, holdAtRally: true,
   },
   mender_rig: {
     id: 'mender_rig', name: 'Mender Rig', role: 'support', roleLabel: 'Vehicle · Support',
@@ -59,6 +59,18 @@ export const UNITS: Record<string, UnitDef> = {
     desc: 'Standard Union line mech. Tough, steady autocannon. Breaker teams and anti-armour frames take it apart.',
     kind: 'mech', cost: 6, hp: 1400, armor: 'armored', speed: 16, radius: 15, height: 30, capture: 0, heavy: true,
     weapon: { type: 'kinetic', damage: 34, range: 96, cooldown: 0.9, hitsAir: true }, deployable: true,
+  },
+  missile_strike: {
+    id: 'missile_strike', name: 'Missile Strike', role: 'strike', roleLabel: 'Strike · Lands anywhere',
+    desc: 'A guided missile from orbit. Drop it anywhere on the field to break up clumps of infantry and drones on the ground.',
+    kind: 'strike', cost: 2, hp: 1, armor: 'structure', speed: 0, radius: 0, height: 0, capture: 0,
+    strike: { damage: 140, radius: 34, delay: 0.9, type: 'explosive', count: 1 }, deployable: true,
+  },
+  supply_depot: {
+    id: 'supply_depot', name: 'Supply Depot', role: 'economy', roleLabel: 'Structure · Economy',
+    desc: 'Forward supply drop. Raises your supply regeneration by 15% while it stands. Lasts about two minutes.',
+    kind: 'structure', cost: 3, hp: 380, armor: 'structure', speed: 0, radius: 9, height: 14, capture: 0, decay: 3,
+    supplyBoost: 0.15, deployable: true,
   },
   // ---- hero frames ----
   kestrel: {
@@ -79,15 +91,15 @@ export const UNITS: Record<string, UnitDef> = {
     id: 'vesper', name: 'VESPER', role: 'hero', roleLabel: 'Hero frame · Marksman',
     desc: 'Long-limbed rail frame with the longest reach of any frame. Ability: Rail Lance pierces every enemy in a line.',
     kind: 'hero', cost: 7, hp: 1200, armor: 'armored', speed: 24, radius: 13, height: 36, capture: 0,
-    hero: true, heavy: true, ability: 'railLance',
+    hero: true, heavy: true, ability: 'railLance', holdAtRally: true,
     weapon: { type: 'antiarmor', damage: 110, range: 128, cooldown: 2.4, hitsAir: false }, deployable: true,
   },
   // ---- non-deployable ----
   core: {
     id: 'core', name: 'Command Spire', role: 'core', roleLabel: 'Base',
     desc: 'Forward command spire with a heavy defence cannon. Lose it and you lose the battle.',
-    kind: 'core', cost: 0, hp: 7000, armor: 'structure', speed: 0, radius: 22, height: 30, capture: 0,
-    weapon: { type: 'kinetic', damage: 32, range: 136, cooldown: 0.8, hitsAir: true }, deployable: false,
+    kind: 'core', cost: 0, hp: 8000, armor: 'structure', speed: 0, radius: 22, height: 30, capture: 0,
+    weapon: { type: 'energy', damage: 44, range: 140, cooldown: 0.8, hitsAir: true }, deployable: false,
   },
   halberd_prime: {
     id: 'halberd_prime', name: 'HALBERD PRIME', role: 'boss', roleLabel: 'Directorate super-frame',

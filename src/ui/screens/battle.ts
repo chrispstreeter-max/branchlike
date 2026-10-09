@@ -7,7 +7,7 @@ import { campaignScreen } from './campaign.js';
 import { missionById } from '../../data/missions.js';
 import { UNITS, ABILITIES } from '../../data/units.js';
 import type { Difficulty, Team, AbilityId } from '../../data/types.js';
-import { createBattle, step, deploy, checkDeploy, useAbility, checkAbility, coreOf, entityById, handCards, nextCard, heavyUnlocked, DT, SUPPLY_MAX, type Battle, type DeployError, type AbilityError } from '../../sim/battle.js';
+import { createBattle, step, deploy, deployTo, resolveDrop, checkDeploy, useAbility, checkAbility, coreOf, entityById, handCards, nextCard, heavyUnlocked, DT, SUPPLY_MAX, type Battle, type DeployError, type AbilityError } from '../../sim/battle.js';
 import { createAi, aiStep, type AiState } from '../../sim/ai.js';
 import { createBattleView, type BattleView } from '../../render/view.js';
 import { deckCards, enemyDeckFor, applyBattleResult } from '../../meta/progression.js';
@@ -16,7 +16,7 @@ export interface BattleParams { missionId: string; difficulty: Difficulty }
 
 const DEPLOY_MSG: Record<DeployError, string> = {
   over: 'The battle is over', no_card: 'Pick a card first', locked: 'Frames are not cleared yet', hero_active: 'That hero frame is already deployed',
-  supply: 'Not enough supply', zone: 'Drop below the dashed line, or next to a hardpoint you hold', blocked: 'Blocked by terrain',
+  supply: 'Not enough supply', zone: 'Aim at the battlefield', blocked: 'Blocked by a building',
 };
 const ABILITY_MSG: Record<AbilityError, string> = {
   over: 'The battle is over', no_pilot: 'No pilot selected', cooldown: 'Still recharging', no_unit: 'Hero not on the field', needs_target: 'Tap the battlefield to aim', out_of_range: 'Target is out of range',
@@ -71,7 +71,7 @@ export function battleScreen(app: App, params: BattleParams): Screen {
   // ---------------------------------------------------------------- state
   const ui: UiState = { selected: null, deploys: 0, captures: 0, abilityUsed: false, inspected: false };
   let selectedCard: number | null = null;
-  let ghost: { unit: string; x: number; y: number; valid: boolean } | null = null;
+  let ghost: { unit: string; x: number; y: number; valid: boolean; rally: { x: number; y: number } | null } | null = null;
   let targeting: { source: number | 'pilot'; ability: AbilityId } | null = null;
   let aim: { x: number; y: number } | null = null;
   let disposed = false;
@@ -98,7 +98,7 @@ export function battleScreen(app: App, params: BattleParams): Screen {
     handKey = key;
     hand.replaceChildren(...cards.map((c, i) => {
       const d = UNITS[c.unit];
-      const kindLabel: Record<string, string> = { infantry: 'Inf', drone: 'Drone', vehicle: 'Vehicle', mech: 'Frame', hero: 'Hero', structure: 'Struct' };
+      const kindLabel: Record<string, string> = { infantry: 'Inf', drone: 'Drone', vehicle: 'Vehicle', mech: 'Frame', hero: 'Hero', structure: 'Struct', strike: 'Strike' };
       const btn = h('button', { class: 'card', 'data-i': String(i), 'data-kind': d.kind, 'aria-label': `${d.name}, ${d.cost} supply. Key ${i + 1}` },
         h('span', { class: 'fill' }),
         h('span', { class: 'cost' }, String(d.cost)),
@@ -126,6 +126,7 @@ export function battleScreen(app: App, params: BattleParams): Screen {
       if (lock) {
         const locked = d.heavy && !heavyUnlocked(b);
         lock.hidden = !locked;
+        cardEl.classList.toggle('locked', !!locked);
         if (locked) lock.querySelector('.lt')!.textContent = fmtTime(b.mission.heavyUnlock - b.t);
         else if (d.hero && b.ents.some(e => e.team === 0 && e.def.id === d.id)) { lock.hidden = false; lock.querySelector('.lt')!.textContent = 'Active'; lock.querySelector('small')!.textContent = 'On field'; }
       }
@@ -185,7 +186,8 @@ export function battleScreen(app: App, params: BattleParams): Screen {
   // ---------------------------------------------------------------- input
   const tryDeployAt = (index: number, cx: number, cy: number) => {
     const w = renderer.toWorld(cx, cy);
-    const err = deploy(b, 0, index, w.x, w.y);
+    if (!w.inside) { toast(DEPLOY_MSG.zone, true); return false; }
+    const err = deployTo(b, 0, index, w.x, w.y);
     if (err) { toast(DEPLOY_MSG[err], true); return false; }
     ui.deploys++;
     selectedCard = null; ghost = null; handKey = '';
@@ -196,8 +198,10 @@ export function battleScreen(app: App, params: BattleParams): Screen {
     if (selectedCard === null) { ghost = null; return; }
     const w = renderer.toWorld(cx, cy);
     const card = handCards(b, 0)[selectedCard];
-    const err = checkDeploy(b, 0, selectedCard, w.x, w.y);
-    ghost = { unit: card.unit, x: w.x, y: w.y, valid: !err || err === 'supply' };
+    // Aim anywhere: the unit drops at the nearest legal spot and heads for the aimed point.
+    const drop = resolveDrop(b, 0, card.unit, w.x, w.y);
+    const err = w.inside ? checkDeploy(b, 0, selectedCard, drop.x, drop.y) : 'zone';
+    ghost = { unit: card.unit, x: drop.x, y: drop.y, valid: !err || err === 'supply', rally: drop.rally };
   };
   const onCardDown = (ev: PointerEvent, index: number) => {
     if (finished || paused) return;
@@ -296,7 +300,7 @@ export function battleScreen(app: App, params: BattleParams): Screen {
 
   // ---------------------------------------------------------------- tutorial
   const coachSteps: Coach[] = mission.tutorial ? [
-    { text: 'Drag a card onto the battlefield, or tap a card and then tap the ground. You can drop units below the dashed line.', done: (_b, u) => u.deploys > 0 },
+    { text: 'Drag a card to where you want that unit to go. It drops at your line and moves there. Aim behind the line to keep it close.', done: (_b, u) => u.deploys > 0 },
     { text: 'Units move and fight on their own. Rifle Squads and Wasp Drones capture hardpoints A, B and C by standing on them. Each point you hold scores.', done: (_b, u) => u.captures > 0, minTime: 4 },
     { text: 'Supply refills over time, up to 10. Once you hold a point, you can also drop units right beside it.', done: () => false, maxTime: 9 },
     { text: 'Frames are cleared. Heavy cards like the Warden Frame and KESTREL-9 are now available. Rocket teams are the answer to enemy armour.', done: () => false, maxTime: 9 },
@@ -363,6 +367,8 @@ export function battleScreen(app: App, params: BattleParams): Screen {
         case 'deploy': app.audio.play(ev.heavy ? 'deployHeavy' : 'deploy'); break;
         case 'heal': app.audio.play('heal'); break;
         case 'ability': if (ev.team === 1) { app.audio.play('ability'); toast(`Enemy ${ABILITIES[ev.ability].name}!`); } break;
+        case 'surge': app.audio.play('unlock'); toast('Final minute: supply production doubled'); break;
+        case 'strike': app.audio.play('shell'); if (ev.team === 1) toast('Incoming missile strike!', true); break;
         case 'capture': {
           const i = b.points.findIndex(pt => pt.id === ev.point);
           const prev = pointOwners[i]; pointOwners[i] = ev.team;
@@ -453,6 +459,7 @@ export function battleScreen(app: App, params: BattleParams): Screen {
   if (debug) (globalThis as any).__branchlike = {
     battle: b,
     deploy: (i: number, x: number, y: number) => deploy(b, 0, i, x, y),
+    deployTo: (i: number, x: number, y: number) => deployTo(b, 0, i, x, y),
     ability: (src: number | 'pilot', x?: number, y?: number) => useAbility(b, 0, src, x, y),
     viewStats: () => (view as any)?.stats?.() ?? null,
     viewKind: () => view?.kind ?? null,

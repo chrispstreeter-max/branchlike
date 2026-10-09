@@ -16,7 +16,7 @@ export function hangarScreen(app: App): Screen {
   const render = (tab: 'units' | 'pilots') => {
     lastTab = tab;
     if (tab === 'units') {
-      const groups: [string, (k: string) => boolean][] = [['Hero frames', k => k === 'hero'], ['Frames and vehicles', k => k === 'mech' || k === 'vehicle'], ['Infantry, drones and structures', k => k === 'infantry' || k === 'drone' || k === 'structure']];
+      const groups: [string, (k: string) => boolean][] = [['Hero frames', k => k === 'hero'], ['Frames and vehicles', k => k === 'mech' || k === 'vehicle'], ['Infantry, drones, structures and strikes', k => k === 'infantry' || k === 'drone' || k === 'structure' || k === 'strike']];
       body.replaceChildren(...groups.map(([title, f]) => h('div', { class: 'stack' },
         h('p', { class: 'eyebrow' }, title),
         h('div', { class: 'roster' }, ...Object.values(UNITS).filter(u => u.deployable && f(u.kind)).map(u => {

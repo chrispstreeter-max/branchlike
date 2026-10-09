@@ -4,8 +4,8 @@
 export type Team = 0 | 1; // 0 = player (Corsair Union), 1 = enemy (Halcyon Directorate)
 export type ArmorClass = 'light' | 'armored' | 'structure' | 'air';
 export type WeaponType = 'kinetic' | 'antiarmor' | 'explosive' | 'energy';
-export type UnitKind = 'infantry' | 'drone' | 'vehicle' | 'mech' | 'hero' | 'structure' | 'boss' | 'core';
-export type Role = 'capture' | 'assault' | 'antiarmor' | 'artillery' | 'support' | 'defense' | 'scout' | 'hero' | 'boss' | 'core';
+export type UnitKind = 'infantry' | 'drone' | 'vehicle' | 'mech' | 'hero' | 'structure' | 'boss' | 'core' | 'strike';
+export type Role = 'capture' | 'assault' | 'antiarmor' | 'artillery' | 'support' | 'defense' | 'scout' | 'hero' | 'boss' | 'core' | 'strike' | 'economy';
 
 export interface WeaponDef {
   type: WeaponType;
@@ -53,6 +53,9 @@ export interface UnitDef {
   hero?: boolean; // unique on the field, delayed clearance
   heavy?: boolean; // needs frame clearance (unlock time)
   deployable: boolean; // false for cores and bosses
+  holdAtRally?: boolean; // stays at its rally point instead of resuming normal behaviour
+  strike?: { damage: number; radius: number; delay: number; type: WeaponType; count: number }; // one-shot card, lands anywhere
+  supplyBoost?: number; // structures that raise supply regeneration while alive
 }
 
 export interface PilotDef {

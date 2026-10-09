@@ -30,7 +30,7 @@ interface Particle { x: number; y: number; z: number; vx: number; vy: number; vz
 interface Decal { x: number; y: number; r: number; a: number }
 
 export interface Overlay {
-  ghost?: { unit: string; x: number; y: number; valid: boolean } | null;
+  ghost?: { unit: string; x: number; y: number; valid: boolean; rally?: { x: number; y: number } | null } | null;
   targeting?: { ability: string; x: number; y: number; fromX?: number; fromY?: number } | null;
   selectedId?: number;
   showRanges: boolean;
@@ -145,6 +145,7 @@ export class Renderer {
           this.fx.push({ kind: 'ab-' + ev.ability, t: ev.ability === 'railLance' ? 0.5 : ev.ability === 'barrage' ? 2.2 : 0.9, T: ev.ability === 'railLance' ? 0.5 : ev.ability === 'barrage' ? 2.2 : 0.9, team: ev.team, x: ev.x, y: ev.y, x2: ev.x2, y2: ev.y2, r: ev.r });
           if (!reduceMotion && (ev.ability === 'quake' || ev.ability === 'railLance')) this.shake = Math.max(this.shake, 5);
           break;
+        case 'strike': this.fx.push({ kind: 'ab-barrage', t: ev.t + 0.2, T: ev.t + 0.2, team: ev.team, x: ev.x, y: ev.y, r: ev.r }); break;
         case 'heal': this.fx.push({ kind: 'heal', t: 0.35, T: 0.35, team: ev.team, x: ev.x1, y: ev.y1, x2: ev.x2, y2: ev.y2 }); break;
       }
     }
@@ -475,6 +476,7 @@ export class Renderer {
     if (showRanges && d.weapon) this.gEll(g.x, g.y, d.weapon.range, hexA(col, 0.06), hexA(col, 0.7), 1, true);
     if (showRanges && d.heal) this.gEll(g.x, g.y, d.heal.range, hexA(SUPPLY, 0.06), hexA(SUPPLY, 0.7), 1, true);
     this.gEll(g.x, g.y, Math.max(8, d.radius + 4), hexA(col, 0.25), col, 2);
+    if (g.rally) { const [ax, ay] = project(g.x, g.y), [bx, by] = project(g.rally.x, g.rally.y); this.ctx.setLineDash([5, 4]); this.ctx.strokeStyle = hexA(col, 0.8); this.ctx.lineWidth = 2; this.line(ax, ay, bx, by); this.ctx.setLineDash([]); this.gEll(g.rally.x, g.rally.y, 7, hexA(col, 0.35), col, 1.5); }
     const [sx, sy] = project(g.x, g.y);
     this.ctx.strokeStyle = hexA(col, 0.6); this.ctx.lineWidth = 2; this.line(sx, sy, sx, sy - 40);
     this.ctx.fillStyle = col; this.ctx.font = `700 11px Bahnschrift, 'Arial Narrow', sans-serif`; this.ctx.textAlign = 'center';

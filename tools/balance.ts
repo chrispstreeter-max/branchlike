@@ -15,7 +15,9 @@ function run(missionIdx: number, seed: number, pd: Difficulty, ed: Difficulty) {
   return { r: b.result, score: b.sides.map(s => Math.floor(s.score)), p: p.counts, e: e.counts };
 }
 
-for (const mi of [1, 2, 3, 4, 5]) {
+const arg = (globalThis as { process?: { argv: string[] } }).process?.argv[2];
+const only = arg ? [Number(arg)] : [1, 2, 3, 4, 5];
+for (const mi of only) {
   for (const [pd, ed] of [['veteran', 'recruit'], ['veteran', 'veteran'], ['elite', 'veteran'], ['veteran', 'elite']] as [Difficulty, Difficulty][]) {
     let wins = 0, t = 0; const n = 20; const reasons: Record<string, number> = {};
     for (let s = 1; s <= n; s++) { const o = run(mi, s * 7919, pd, ed); if (o.r!.winner === 0) wins++; t += o.r!.time; reasons[o.r!.reason] = (reasons[o.r!.reason] ?? 0) + 1; }

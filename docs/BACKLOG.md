@@ -19,6 +19,9 @@ Status key: ✅ done · 🔄 in progress · ⬜ to do · ⛔ blocked
 
 ## Next up (highest impact first)
 
+- ⬜ Capture, deploy and death effects on cards (for example reinforcements when a point is taken). From the Titanfall: Assault research, see GDD 6b.
+- ⬜ Pilots that cross terrain (wall-running infantry ignoring building footprints).
+- ⬜ Maps that change during play (collapsing buildings, opening routes).
 - ⬜ Human playtest pass on real phones; tune supply rate, clearance times and mission 4/5 difficulty.
 - ⬜ Commission hero and line frames as glTF; add a GLTFLoader path in `buildModel()` (awaiting approval).
 - ⬜ Card illustrations rendered from the 3D models.

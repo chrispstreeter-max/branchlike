@@ -20,7 +20,7 @@ const TEAM_HEX = ['#f2a93b', '#9583ff'];
 const TEAM_NUM = [0xf2a93b, 0x9583ff];
 const ENERGY = 0x6fd3ef;
 
-interface UnitView { root: T3; gun: T3 | null; legs: T3[]; spec: ModelSpec; x: number; y: number; yaw: number; phase: number; recoil: number; seen: boolean; structure: boolean }
+interface UnitView { root: T3; gun: T3 | null; legs: T3[]; spec: ModelSpec; x: number; y: number; yaw: number; phase: number; recoil: number; seen: boolean; structure: boolean; landed: boolean }
 interface PointView { pad: T3; ring: T3; arc: T3; beacon: T3; gem: T3; lastCap: number; lastOwner: Team | null | undefined }
 interface Line2D { x1: number; y1: number; h1: number; x2: number; y2: number; h2: number; t: number; T: number; color: string; width: number; kind: 'tracer' | 'beam' | 'heal' | 'rocket' }
 interface Proj { x1: number; y1: number; h1: number; x2: number; y2: number; h2: number; t: number; T: number; arc: number; color: [number, number, number]; trail: boolean; size: number }
@@ -447,7 +447,7 @@ export class View3D implements BattleView {
     if (!structure) root.rotation.y = yaw;
     root.position.set(e.x, spec.hover, e.y);
     this.scene.add(root);
-    return { root, gun, legs, spec, x: e.x, y: e.y, yaw, phase: Math.random() * 6, recoil: 0, seen: true, structure };
+    return { root, gun, legs, spec, x: e.x, y: e.y, yaw, phase: Math.random() * 6, recoil: 0, seen: true, structure, landed: false };
   }
 
   private syncUnits(b: Battle, dt: number) {
@@ -461,7 +461,21 @@ export class View3D implements BattleView {
       v.x += (e.x - v.x) * k; v.y += (e.y - v.y) * k;
       const moved = Math.hypot(v.x - ox, v.y - oy);
       const age = b.t - e.spawnT;
-      const drop = age < 0.4 && e.def.kind !== 'core' && e.def.kind !== 'boss' ? Math.pow(1 - age / 0.4, 2) * 160 : 0;
+      // Frames and heroes fall from orbit: longer, higher drop, with an impact shockwave on landing.
+      const heavyDrop = e.def.kind === 'mech' || e.def.kind === 'hero';
+      const dropT = heavyDrop ? 0.75 : 0.4, dropH = heavyDrop ? 520 : 160;
+      const drop = age < dropT && e.def.kind !== 'core' && e.def.kind !== 'boss' ? Math.pow(1 - age / dropT, 2) * dropH : 0;
+      if (heavyDrop && !v.landed && age >= dropT) {
+        v.landed = true;
+        this.ring(e.x, e.y, 8, 70, 0.6, 0xffe2b0, 1);
+        this.decal(e.x, e.y, e.def.radius * 1.3);
+        for (let i = 0; i < 22; i++) { const a = Math.random() * 6.28; this.smoke.emit(e.x, 2, e.y, Math.cos(a) * 70, 8 + Math.random() * 12, Math.sin(a) * 70, 1.2, 6, 22, 0.42, 0.39, 0.35, 0.6, 0, 2.2); }
+        this.flash(e.x, e.y, 4, 4);
+        this.shake = Math.max(this.shake, 6);
+      } else if (heavyDrop && age < dropT && Math.random() < 0.6) {
+        this.glow.emit(e.x, drop + 10, e.y, 0, 40, 0, 0.25, 10, 3, 1, 0.7, 0.4, 0.9);
+      }
+      if (!heavyDrop) v.landed = true;
       const bob = v.spec.hover ? Math.sin(this.time * 5 + e.id) * 1.2 : 0;
       v.root.position.set(v.x, v.spec.hover + drop + bob, v.y);
       const yaw = -e.face;
@@ -583,6 +597,12 @@ export class View3D implements BattleView {
           if (p && ev.team !== null) { this.ring(p.x, p.y, POINT_RADIUS, POINT_RADIUS + 34, 0.9, TEAM_NUM[ev.team], 1, 2); this.beam(p.x, p.y, 6, 200, 0.8, TEAM_NUM[ev.team]); }
           break;
         }
+        case 'strike': {
+          // Missile streaks in from high above, with a warning ring on the ground.
+          this.projs.push({ x1: ev.x + 140, y1: ev.y - 160, h1: 520, x2: ev.x, y2: ev.y, h2: 1, t: ev.t, T: ev.t, arc: 0, color: [1, 0.75, 0.45], trail: true, size: 9 });
+          this.ring(ev.x, ev.y, ev.r, ev.r * 0.4, ev.t, ev.team === 0 ? 0xffb36b : 0xff6158, 0.9, 0.9);
+          break;
+        }
         case 'heal': this.lines.push({ x1: ev.x1, y1: ev.y1, h1: 16, x2: ev.x2, y2: ev.y2, h2: 10, t: 0.4, T: 0.4, color: '#6fd3ef', width: 2, kind: 'heal' }); break;
         case 'ability': this.abilityFx(ev, reduceMotion); break;
       }
@@ -693,7 +713,14 @@ export class View3D implements BattleView {
       }
     }
     // Ghost
-    if (o.ghost) {
+    const strikeDef = o.ghost ? UNITS[o.ghost.unit].strike : undefined;
+    if (o.ghost && strikeDef) {
+      const g = o.ghost, col = g.valid ? 0xffb36b : 0xff6158;
+      ui.reticle.visible = ui.reticleFill.visible = true;
+      ui.reticle.position.set(g.x, 0.9, g.y); ui.reticle.scale.setScalar(strikeDef.radius); ui.reticle.material.color.setHex(col);
+      ui.reticleFill.position.set(g.x, 0.85, g.y); ui.reticleFill.scale.setScalar(strikeDef.radius); ui.reticleFill.material.color.setHex(col);
+      if (this.ghost) this.ghost.group.visible = false;
+    } else if (o.ghost) {
       const g = o.ghost;
       if (!this.ghost || this.ghost.id !== g.unit) {
         if (this.ghost) this.scene.remove(this.ghost.group);
@@ -802,8 +829,18 @@ export class View3D implements BattleView {
       const ve = e && this.units.get(e.id), vt = t && this.units.get(t.id);
       if (ve && vt) { const a = this.screen(ve.x, ve.spec.height * 0.6, ve.y), c = this.screen(vt.x, vt.spec.height * 0.5, vt.y); g.setLineDash([4, 4]); g.strokeStyle = 'rgba(231,234,237,0.7)'; g.lineWidth = 1.2; g.beginPath(); g.moveTo(a.sx, a.sy); g.lineTo(c.sx, c.sy); g.stroke(); g.setLineDash([]); g.strokeStyle = '#ff6158'; g.beginPath(); g.arc(c.sx, c.sy, 8, 0, Math.PI * 2); g.stroke(); }
     }
+    // Rally line: drop point to the aimed point
+    const rallyLine = (x1: number, y1: number, x2: number, y2: number, col: string) => {
+      const a = this.screen(x1, 2, y1), c = this.screen(x2, 2, y2);
+      g.setLineDash([6, 5]); g.strokeStyle = col; g.lineWidth = 2; g.beginPath(); g.moveTo(a.sx, a.sy); g.lineTo(c.sx, c.sy); g.stroke(); g.setLineDash([]);
+      const top = this.screen(x2, 20, y2);
+      g.strokeStyle = col; g.lineWidth = 2; g.beginPath(); g.moveTo(c.sx, c.sy); g.lineTo(top.sx, top.sy); g.stroke();
+      g.fillStyle = col; g.beginPath(); g.moveTo(top.sx, top.sy); g.lineTo(top.sx + 12, top.sy + 4); g.lineTo(top.sx, top.sy + 8); g.closePath(); g.fill();
+    };
+    if (o.ghost?.rally) rallyLine(o.ghost.x, o.ghost.y, o.ghost.rally.x, o.ghost.rally.y, o.ghost.valid ? TEAM_HEX[0] : '#ff6158');
+    if (o.selectedId) { const e = b.ents.find(x => x.id === o.selectedId); const v = e && this.units.get(e.id); if (e?.rally && v) rallyLine(v.x, v.y, e.rally.x, e.rally.y, TEAM_HEX[e.team]); }
     // Ghost label
-    if (o.ghost) {
+    if (o.ghost && !UNITS[o.ghost.unit].strike) {
       const s = this.screen(o.ghost.x, this.model(o.ghost.unit, 0).height + 12, o.ghost.y);
       g.font = '700 11px Bahnschrift, "Arial Narrow", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'bottom';
       const text = o.ghost.valid ? UNITS[o.ghost.unit].name.toUpperCase() : "CAN'T DEPLOY HERE";

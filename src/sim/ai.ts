@@ -147,6 +147,7 @@ export function deployOptions(b: Battle, ai: AiState, s: Situation): Option[] {
     if (def.heavy && !heavyUnlocked(b)) return;
     if (def.hero && b.ents.some(e => e.team === me && e.def.id === def.id)) return;
     if (profile === 'passive' && def.heavy) return;
+    if (def.kind === 'strike') return; // strikes are aimed separately (tryStrikes)
     const affordable = def.cost <= side.supply;
     const age = b.t - (ai.handSeen.get(deckIdx) ?? b.t);
     const fit = counterFit(card.unit, s.enemyComp, s.enemyTotal);
@@ -163,11 +164,14 @@ export function deployOptions(b: Battle, ai: AiState, s: Situation): Option[] {
           u = t.value.fight * (0.5 + fit) + (s.enemyComp.light > 6 ? 0.8 : 0); why = 'artillery'; break;
         case 'support':
           u = s.myArmored > 8 && s.mySupport < 2 ? 1.2 + Math.min(1.5, s.myArmored / 20) - s.mySupport * 0.8 : -1; why = 'support'; break;
+        case 'economy':
+          u = b.ents.some(e => e.team === me && e.def.supplyBoost) ? -1 : (t.kind === 'core' ? 1.6 : 0.2) + (b.mission.timeLimit - b.t > 120 ? 0.6 : -1); why = 'economy'; break;
         case 'defense':
           u = (t.kind === 'core' ? t.value.fight * 1.2 : (owner(b.points[t.i]) === me ? 1.1 + t.value.fight * 0.7 : t.value.fight * 0.5)) * (0.6 + fit * 0.4); why = 'fortify'; break;
         default: u = 0;
       }
-      u += (fit - 0.6) * ai.knobs.counter;
+      // Countering matters more as the opponent commits more units.
+      u += (fit - 0.6) * ai.knobs.counter * (1 + Math.min(1.5, s.enemyTotal / 15));
       if (profile === 'aggressive' && def.capture === 0) u += 0.8;
       if (profile === 'siege' && (def.role === 'defense' || def.role === 'artillery')) u += 0.6;
       if (b.mission.mode !== 'hardpoint' && def.role === 'capture') u -= 0.3;
@@ -177,6 +181,7 @@ export function deployOptions(b: Battle, ai: AiState, s: Situation): Option[] {
       let x = t.x + ai.rng.range(-22, 22), y = t.y;
       if (def.role === 'artillery') y = zoneY(me, 0.6);
       if (def.role === 'support') y = zoneY(me, 0.2);
+      if (def.role === 'economy') { x = 60 + ai.rng.next() * (WORLD_W - 120); y = zoneY(me, 0.75); }
       if (def.role === 'defense' && t.kind === 'point' && owner(b.points[t.i]) === me && ai.knobs.forward) { x = b.points[t.i].x + ai.rng.range(-14, 14); y = b.points[t.i].y + (me === 1 ? -20 : 20); }
       x = Math.max(16, Math.min(WORLD_W - 16, x));
       if (t.kind === 'core' && u > 0) why = 'defend spire';
@@ -239,6 +244,25 @@ function tryAbilities(b: Battle, ai: AiState): boolean {
   return false;
 }
 
+/** Fire a strike card from hand at the most valuable enemy cluster, if worth it. */
+function tryStrikes(b: Battle, ai: AiState): boolean {
+  const me = ai.team, side = b.sides[me];
+  for (let h = 0; h < side.hand.length; h++) {
+    const def = UNITS[side.deck[side.hand[h]].unit];
+    if (!def.strike || def.cost > side.supply) continue;
+    let best = 0, bx = 0, by = 0;
+    for (const e of b.ents) {
+      if (e.team === me || e.def.kind === 'core' || e.def.armor === 'air') continue;
+      const v = clusterValue(b, me, e.x, e.y, def.strike.radius);
+      if (v > best) { best = v; bx = e.x; by = e.y; }
+    }
+    if (best >= 5 * ai.knobs.abilityBar && ai.rng.next() < Math.max(0.3, ai.knobs.abilityUse)) {
+      if (!deploy(b, me, h, bx, by)) { ai.counts.abilities++; ai.log.push(`${b.t.toFixed(1)} strike ${def.id} value ${best.toFixed(1)}`); return true; }
+    }
+  }
+  return false;
+}
+
 /** Call once per simulation step, before step(). */
 export function aiStep(ai: AiState, b: Battle): void {
   if (b.result) return;
@@ -248,6 +272,7 @@ export function aiStep(ai: AiState, b: Battle): void {
   const me = ai.team, side = b.sides[me];
   for (const i of side.hand) if (!ai.handSeen.has(i)) ai.handSeen.set(i, b.t);
   if (tryAbilities(b, ai)) return;
+  if (ai.profile !== 'passive' && tryStrikes(b, ai)) return;
 
   if (ai.profile === 'passive' && side.supply < 7) return;
   const s = assess(b, me);

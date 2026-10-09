@@ -68,6 +68,14 @@ export function counterTags(d: UnitDef): { strong: string[]; weak: string[] } {
 
 export function statRows(d: UnitDef, level: number): HTMLElement {
   const mul = levelMultiplier(level);
+  if (d.strike) {
+    const st = d.strike;
+    return h('div', { class: 'stack' },
+      h('div', { class: 'stat' }, h('span', { class: 'muted' }, 'Damage'), h('div', { class: 'bar' }, h('i', { style: { width: `${Math.min(100, st.damage * mul / 200 * 100)}%` } })), h('span', { class: 'num' }, String(Math.round(st.damage * mul)))),
+      h('div', { class: 'stat' }, h('span', { class: 'muted' }, 'Blast radius'), h('div', { class: 'bar' }, h('i', { style: { width: `${st.radius / 60 * 100}%` } })), h('span', { class: 'num' }, String(st.radius))),
+      h('p', { class: 'small muted' }, `Lands ${st.delay}s after you aim it, anywhere on the field. Cannot hit drones.`),
+    );
+  }
   const w = d.weapon;
   const dps = w ? (w.damage * mul / w.cooldown) * (d.squad ?? 1) : 0;
   const rows: [string, number, number, string][] = [
@@ -80,6 +88,8 @@ export function statRows(d: UnitDef, level: number): HTMLElement {
   for (const [label, v, max, text] of rows) {
     wrap.append(h('div', { class: 'stat' }, h('span', { class: 'muted' }, label), h('div', { class: 'bar' }, h('i', { style: { width: `${Math.min(100, v / max * 100)}%` } })), h('span', { class: 'num' }, text)));
   }
+  if (d.supplyBoost) wrap.append(h('p', { class: 'small muted' }, `Raises supply regeneration by ${Math.round(d.supplyBoost * 100)}% while it stands.`));
+  if (d.holdAtRally) wrap.append(h('p', { class: 'small muted' }, 'Holds position at its rally point.'));
   if (d.heal) wrap.append(h('p', { class: 'small muted' }, `Repairs ${Math.round(d.heal.amount * mul)} health per second to the most damaged ally in range.`));
   if (d.ability) wrap.append(h('p', { class: 'small' }, h('b', null, ABILITIES[d.ability].name + ': '), ABILITIES[d.ability].desc));
   return wrap;

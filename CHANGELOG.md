@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.0 — Gameplay pass from Titanfall: Assault research
+
+### Added
+- **Drop and rally point:** drag a card anywhere on the field. The unit drops at your line (or beside a held hardpoint) and moves to the aimed point; a dashed rally line and flag show the plan while dragging and when a unit is selected.
+- **Rally holders:** Mortar Crawler and VESPER hold at their rally point.
+- **Frames march** down their lane on the enemy spire, and arrive by frame-fall with an impact shockwave.
+- **Final-minute surge:** supply production doubles for the last 60 seconds (not in defend missions).
+- **Missile Strike** card (2 supply, lands anywhere) and **Supply Depot** structure (+15% supply for about two minutes). Unlocked by First Drop and Relay Ridge; used by Halcyon in later missions. The AI aims strikes at clusters and builds depots when it can afford them.
+- Six new tests (rally resolution and holding, strike damage, surge, depot, frame march); the AI counter test now compares choices against armour vs infantry.
+
+### Balance
+- Spire cannon is now an energy weapon (44 damage, 140 range) with 8,000 health, so marching frames meet real resistance.
+
 ## 0.3.0 — Reference pass: urban battlefield and landscape
 
 ### Added

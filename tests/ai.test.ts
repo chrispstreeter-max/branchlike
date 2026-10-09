@@ -60,18 +60,23 @@ test('AI deploys to defend its spire when it is threatened', () => {
   assert.ok(ai.counts.defends > 0, ai.log.join('\n'));
 });
 
-test('AI counters an armour-heavy opponent with anti-armour', () => {
-  let anti = 0, total = 0;
-  const armour = ['warden_frame', 'warden_frame', 'hound_apc', 'hound_apc', 'mortar_crawler', 'mortar_crawler', 'mender_rig', 'mender_rig'];
+test('AI counters: it plays anti-armour far more against armour than against infantry', () => {
+  // The hand cycles through the deck, so raw shares stay near the deck mix; what
+  // matters is how the share moves with the opponent's composition.
   const mixed = ['rifle_squad', 'rifle_squad', 'breaker_team', 'breaker_team', 'hound_apc', 'wasp_drone', 'wasp_drone', 'bastion_turret'];
-  for (let s = 1; s <= 6; s++) {
-    const b = createBattle({ mission: { ...MISSIONS[1], heavyUnlock: 0 }, seed: s, player: { deck: deckOf(armour), pilot: null }, enemy: { deck: deckOf(mixed), pilot: null } });
-    const p = createAi(b, 0, 'veteran'), ai = createAi(b, 1, 'elite');
-    for (let i = 0; i < 20 * 150 && !b.result; i++) { aiStep(p, b); aiStep(ai, b); step(b); }
-    for (const l of ai.log) if (l.includes(' deploy ')) { total++; if (l.includes('breaker_team')) anti++; }
-  }
-  // Breakers are 25% of the deck; against armour the AI should pick them more than that.
-  assert.ok(anti / total > 0.3, `breakers were ${(100 * anti / total).toFixed(0)}% of deploys`);
+  const share = (opponent: string[]) => {
+    let anti = 0, total = 0;
+    for (let s = 1; s <= 16; s++) {
+      const b = createBattle({ mission: { ...MISSIONS[1], heavyUnlock: 0 }, seed: s, player: { deck: deckOf(opponent), pilot: null }, enemy: { deck: deckOf(mixed), pilot: null } });
+      const p = createAi(b, 0, 'veteran'), ai = createAi(b, 1, 'elite');
+      for (let i = 0; i < 20 * 150 && !b.result; i++) { aiStep(p, b); aiStep(ai, b); step(b); }
+      for (const l of ai.log) if (l.includes(' deploy ')) { total++; if (l.includes('breaker_team')) anti++; }
+    }
+    return anti / total;
+  };
+  const vsArmour = share(['warden_frame', 'warden_frame', 'hound_apc', 'hound_apc', 'mortar_crawler', 'mortar_crawler', 'mender_rig', 'mender_rig']);
+  const vsInfantry = share(['rifle_squad', 'rifle_squad', 'wasp_drone', 'wasp_drone', 'rifle_squad', 'wasp_drone', 'breaker_team', 'bastion_turret']);
+  assert.ok(vsArmour > vsInfantry + 0.07, `breakers ${(100 * vsArmour).toFixed(0)}% vs armour, ${(100 * vsInfantry).toFixed(0)}% vs infantry`);
 });
 
 test('AI never cheats: it cannot deploy without supply', () => {

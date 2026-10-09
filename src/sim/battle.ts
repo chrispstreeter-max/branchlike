@@ -17,6 +17,8 @@ export const HAND_SIZE = 4;
 const CAP_RATE = 20; // capture % per second for one unit of capture power
 const SCORE_INTERVAL = 4; // one point per held hardpoint every 4 seconds
 const ASSAULT_POINT_SUPPLY_BONUS = 0.08;
+export const SURGE_WINDOW = 60; // seconds before the time limit
+export const SURGE_MULTIPLIER = 2;
 
 export interface DeckCard { unit: string; level: number }
 export interface SideConfig { deck: DeckCard[]; pilot: string | null }
@@ -40,6 +42,7 @@ export interface Entity {
   ox: number; oy: number;
   spawnT: number;
   lastHit: number;
+  rally: { x: number; y: number } | null; // where the player sent it; null once reached (unless it holds there)
 }
 
 export interface Side {
@@ -66,7 +69,9 @@ export type BattleEvent =
   | { type: 'deploy'; team: Team; x: number; y: number; unit: string; heavy: boolean }
   | { type: 'capture'; team: Team | null; point: string }
   | { type: 'ability'; team: Team; ability: AbilityId; x: number; y: number; x2?: number; y2?: number; r: number }
-  | { type: 'heal'; team: Team; x1: number; y1: number; x2: number; y2: number };
+  | { type: 'heal'; team: Team; x1: number; y1: number; x2: number; y2: number }
+  | { type: 'strike'; team: Team; x: number; y: number; r: number; t: number }
+  | { type: 'surge' };
 
 export type BattleResultReason = 'score' | 'core' | 'boss' | 'survived' | 'timeout';
 export interface BattleResult { winner: Team | null; reason: BattleResultReason; time: number }
@@ -85,6 +90,7 @@ export interface Battle {
   events: BattleEvent[];
   result: BattleResult | null;
   bossId: number;
+  surge: boolean; // final-minute supply surge has started
 }
 
 export type DeployError = 'over' | 'no_card' | 'locked' | 'hero_active' | 'supply' | 'zone' | 'blocked';
@@ -120,7 +126,7 @@ export function createBattle(cfg: BattleConfig): Battle {
     mission: cfg.mission, map, seed: cfg.seed, t: 0, rng, nextId: 1, ents: [],
     sides: [makeSide(cfg.player, rng), makeSide(cfg.enemy, rng)],
     points: map.points.map(p => ({ id: p.id, x: p.x, y: p.y, cap: 0, owner: null })),
-    shells: [], events: [], result: null, bossId: 0,
+    shells: [], events: [], result: null, bossId: 0, surge: false,
   };
   for (const team of [0, 1] as Team[]) spawn(b, team, UNITS.core, CORE_POS[team].x, CORE_POS[team].y, 1);
   if (cfg.mission.boss) {
@@ -149,7 +155,7 @@ function spawn(b: Battle, team: Team, def: UnitDef, x: number, y: number, level:
     targetId: 0, retarget: 0,
     face: team === 0 ? -Math.PI / 2 : Math.PI / 2,
     lane: nearestLane(b, x), stun: 0, aegis: 0, abilityCd: def.ability ? ABILITIES[def.ability].cooldown * 0.5 : 0,
-    ox: b.rng.range(-14, 14), oy: b.rng.range(-12, 12), spawnT: b.t, lastHit: -99,
+    ox: b.rng.range(-14, 14), oy: b.rng.range(-12, 12), spawnT: b.t, lastHit: -99, rally: null,
   };
   b.ents.push(e);
   return e;
@@ -197,12 +203,54 @@ export function checkDeploy(b: Battle, team: Team, handIndex: number, x: number,
   if (def.heavy && !heavyUnlocked(b)) return 'locked';
   if (def.hero && b.ents.some(e => e.team === team && e.def.id === def.id)) return 'hero_active';
   if (def.cost > side.supply + 1e-9) return 'supply';
+  if (def.kind === 'strike') return x >= 0 && x <= WORLD_W && y >= 0 && y <= WORLD_H ? null : 'zone';
   if (!inDeployZone(b, team, x, y)) return 'zone';
   if (def.kind !== 'drone' && insideObstacle(b, x, y, def.radius)) return 'blocked';
   return null;
 }
 
-export function deploy(b: Battle, team: Team, handIndex: number, x: number, y: number): DeployError | null {
+/**
+ * Where a card dropped at (x, y) actually lands, and where it should go.
+ * Units always drop inside their own deploy zone (or beside a held hardpoint).
+ * If the player aimed further forward, the drop lands at the nearest legal spot
+ * and the aimed point becomes the unit's rally point. Strikes land anywhere.
+ */
+export function resolveDrop(b: Battle, team: Team, unit: string, x: number, y: number): { x: number; y: number; rally: { x: number; y: number } | null } {
+  const def = UNITS[unit];
+  const tx = Math.max(8, Math.min(WORLD_W - 8, x)), ty = Math.max(8, Math.min(WORLD_H - 8, y));
+  if (def.kind === 'strike') return { x: tx, y: ty, rally: null };
+  const blocked = (px: number, py: number) => def.kind !== 'drone' && insideObstacle(b, px, py, def.radius);
+  if (inDeployZone(b, team, tx, ty) && !blocked(tx, ty)) return { x: tx, y: ty, rally: null };
+  const cands: { x: number; y: number }[] = [];
+  const lineY = team === 0 ? DEPLOY_LINE[0] + 10 : DEPLOY_LINE[1] - 10;
+  cands.push({ x: Math.max(16, Math.min(WORLD_W - 16, tx)), y: team === 0 ? Math.max(ty, lineY) : Math.min(ty, lineY) });
+  for (const p of b.points) {
+    if (p.owner !== team || Math.abs(p.cap) < 100) continue;
+    const dx = tx - p.x, dy = ty - p.y, L = Math.hypot(dx, dy) || 1, r = Math.min(L, FORWARD_DEPLOY_RADIUS - 6);
+    cands.push({ x: p.x + dx / L * r, y: p.y + dy / L * r });
+  }
+  cands.sort((a, c) => Math.hypot(a.x - tx, a.y - ty) - Math.hypot(c.x - tx, c.y - ty));
+  for (const c of cands) {
+    for (const off of [0, 22, -22, 44, -44]) {
+      const px = Math.max(12, Math.min(WORLD_W - 12, c.x + off));
+      if (inDeployZone(b, team, px, c.y) && !blocked(px, c.y)) {
+        const far = Math.hypot(px - tx, c.y - ty) > 14;
+        return { x: px, y: c.y, rally: far && !blocked(tx, ty) ? { x: tx, y: ty } : null };
+      }
+    }
+  }
+  return { x: tx, y: ty, rally: null };
+}
+
+/** Deploy a hand card aimed at (x, y): resolves the drop point and rally point. Used by the player's UI. */
+export function deployTo(b: Battle, team: Team, handIndex: number, x: number, y: number): DeployError | null {
+  const deckIdx = b.sides[team].hand[handIndex];
+  if (deckIdx === undefined) return b.result ? 'over' : 'no_card';
+  const r = resolveDrop(b, team, b.sides[team].deck[deckIdx].unit, x, y);
+  return deploy(b, team, handIndex, r.x, r.y, r.rally);
+}
+
+export function deploy(b: Battle, team: Team, handIndex: number, x: number, y: number, rally: { x: number; y: number } | null = null): DeployError | null {
   const err = checkDeploy(b, team, handIndex, x, y);
   if (err) return err;
   const side = b.sides[team];
@@ -212,16 +260,23 @@ export function deploy(b: Battle, team: Team, handIndex: number, x: number, y: n
   side.supply -= def.cost;
   side.stats.supplySpent += def.cost;
   side.stats.deployed++;
+  side.queue.push(deckIdx);
+  side.hand[handIndex] = side.queue.shift()!;
+  if (def.strike) {
+    const st = def.strike, mul = levelMultiplier(card.level);
+    for (let i = 0; i < st.count; i++) b.shells.push({ x, y, t: st.delay + i * 0.15, dmg: st.damage * mul, type: st.type, splash: st.radius, team, hitsAir: false });
+    b.events.push({ type: 'strike', team, x, y, r: st.radius, t: st.delay });
+    return null;
+  }
   const n = def.squad ?? 1;
   for (let i = 0; i < n; i++) {
     const ox = n === 1 ? 0 : (i - (n - 1) / 2) * 11;
     const oy = n === 1 ? 0 : (i % 2 ? 8 : 0) * (team === 0 ? 1 : -1);
     let px = Math.max(10, Math.min(WORLD_W - 10, x + ox)), py = y + oy;
     if (def.kind !== 'drone' && insideObstacle(b, px, py, def.radius)) { px = x; py = y; }
-    spawn(b, team, def, px, py, card.level);
+    const e = spawn(b, team, def, px, py, card.level);
+    if (rally && def.speed > 0) e.rally = { x: Math.max(8, Math.min(WORLD_W - 8, rally.x + ox)), y: rally.y + oy };
   }
-  side.queue.push(deckIdx);
-  side.hand[handIndex] = side.queue.shift()!;
   b.events.push({ type: 'deploy', team, x, y, unit: def.id, heavy: !!def.heavy || def.kind === 'structure' });
   return null;
 }
@@ -368,6 +423,11 @@ function goalFor(b: Battle, e: Entity): { x: number; y: number } {
   const push = { x: enemyCore.x + e.ox, y: enemyCore.y + (team === 0 ? 70 : -70) };
   const k = e.def.kind;
   if (k === 'boss') return { x: CORE_POS[0].x, y: CORE_POS[0].y - 150 };
+  if (e.rally) {
+    if (dist(e, e.rally) > 10) return e.rally;
+    if (e.def.holdAtRally) return e.rally;
+    e.rally = null;
+  }
   const aggressive = team === 1 && (b.mission.aiProfile === 'aggressive' || b.mission.mode === 'defend');
   if (e.def.role === 'support') {
     let best: Entity | null = null, bs = Infinity;
@@ -387,6 +447,12 @@ function goalFor(b: Battle, e: Entity): { x: number; y: number } {
     for (const p of pts) if (!securedBy(p, team)) { const d = dist(e, p); if (d < bd) { bd = d; best = p; } }
     if (best) return { x: best.x + e.ox, y: best.y + e.oy };
     return push;
+  }
+  // Frames march down their lane on the enemy spire, fighting whatever they meet.
+  if (k === 'mech' || k === 'hero') {
+    const lanePt = pts[e.lane];
+    const behind = team === 0 ? e.y > lanePt.y + 12 : e.y < lanePt.y - 12;
+    return behind ? { x: lanePt.x + e.ox * 0.5, y: lanePt.y } : push;
   }
   // Combat units escort: own lane first if it is not secured, then the nearest unsecured point.
   const home = pts[e.lane];
@@ -459,6 +525,8 @@ export function supplyRate(b: Battle, team: Team): number {
   let r = SUPPLY_REGEN;
   if (side.pilot?.passive.id === 'supply') r *= 1 + side.pilot.passive.value;
   if (b.mission.mode !== 'hardpoint') r *= 1 + ASSAULT_POINT_SUPPLY_BONUS * b.points.filter(p => p.owner === team).length;
+  for (const e of b.ents) if (e.team === team && e.def.supplyBoost) r *= 1 + e.def.supplyBoost;
+  if (b.surge) r *= SURGE_MULTIPLIER;
   return r;
 }
 
@@ -467,6 +535,9 @@ export function step(b: Battle): void {
   if (b.result) return;
   const dt = DT;
   b.t += dt;
+
+  // Final minute: supply production doubles (not in defend missions, where the clock is the objective).
+  if (!b.surge && b.mission.mode !== 'defend' && b.mission.timeLimit - b.t <= SURGE_WINDOW) { b.surge = true; b.events.push({ type: 'surge' }); }
 
   for (const team of [0, 1] as Team[]) {
     const s = b.sides[team];

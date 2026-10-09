@@ -40,7 +40,7 @@ Open `http://localhost:5173` on a phone on the same network, or use your browser
 
 ## Controls
 
-- Drag a card onto the battlefield, or tap a card then tap the ground. You can deploy below the dashed line, or next to a hardpoint you fully hold.
+- Drag a card onto the battlefield, or tap a card then tap the ground. Aim anywhere: the unit drops below the dashed line (or next to a hardpoint you fully hold) and moves to the point you aimed at, its rally point. Strike cards land exactly where you aim.
 - Tap a unit to see its health, range and current target.
 - Tap an ability button. Targeted abilities then need a tap on the battlefield; tap the button again to cancel.
 - Keyboard: `1`–`4` select cards, `Esc` cancels or pauses, `Space` pauses.
