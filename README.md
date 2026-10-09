@@ -10,7 +10,7 @@ BRANCHLIKE is an original game. It takes high-level genre principles from lane-a
 | --- | --- |
 | Playable prototype (web, phone-first) | **Yes.** Full campaign loop, 6 missions, hangar, upgrades, saves. 3D battlefield (Three.js) with 2D fallback. |
 | Native mobile build (iOS / Android) | Not yet. Configured for Capacitor; needs a Mac/Xcode or Android Studio. See [Mobile builds](#mobile-builds). |
-| Production release | No. Procedural placeholder 3D models and synthesised audio; balance tuned by simulation, not yet by player testing. See [Visual upgrade](docs/VISUAL_UPGRADE.md). |
+| Production release | No. Original in-code 3D models (frames fully designed; other units simpler), synthesised audio; balance tuned by simulation, not yet by player testing. See [Visual upgrade](docs/VISUAL_UPGRADE.md). |
 
 ## What's in the vertical slice
 
@@ -80,5 +80,6 @@ docs/          design document, architecture, backlog, testing, assets
 - [Testing guide](docs/TESTING.md)
 - [Backlog](docs/BACKLOG.md)
 - [Visual upgrade: gap analysis and asset stack](docs/VISUAL_UPGRADE.md)
+- [Frame design sheet](docs/MECHS.md)
 - [Asset provenance and licences](docs/ASSETS.md)
 - [Changelog](CHANGELOG.md)

@@ -7,6 +7,7 @@ import { PILOTS, PLAYER_PILOTS } from '../../data/pilots.js';
 import { MISSIONS } from '../../data/missions.js';
 import { upgradeInfo, upgradeUnit } from '../../meta/progression.js';
 import { menuScreen } from './menu.js';
+import { webglAvailable } from '../../render/view.js';
 
 let lastTab: 'units' | 'pilots' = 'units';
 
@@ -60,11 +61,29 @@ export function unitDetailScreen(app: App, id: string): Screen {
   const src = MISSIONS.find(m => m.firstClear.unlockUnits?.includes(id));
   const content = h('div', { class: 'screen-scroll' });
   const credits = creditsChip(app);
+  // A rotating 3D model of the unit when WebGL is available; the illustration otherwise.
+  const art = h('div', { class: 'detail-art' });
+  art.append(frag(unitArt(id)));
+  let preview: { dispose(): void } | null = null, gone = false;
+  if (webglAvailable() && !new URLSearchParams(location.search).has('render')) {
+    import('../../render/preview3d.js').then(async ({ UnitPreview, loadThree }) => {
+      const T = await loadThree();
+      if (gone) return;
+      const canvas = h('canvas', { class: 'detail-3d', 'aria-label': `3D model of ${d.name}`, role: 'img' }) as HTMLCanvasElement;
+      art.replaceChildren(canvas);
+      art.classList.add('three');
+      const still = p.settings.reduceMotion;
+      const pv = new UnitPreview(T, canvas, { team: 0, walk: !still && d.speed > 0, spin: !still });
+      pv.show(id);
+      if (still) pv.frame(0); else pv.start();
+      preview = pv;
+    }).catch(err => console.warn('3D preview unavailable', err));
+  }
   const render = () => {
     const info = upgradeInfo(p, id);
     const tags = counterTags(d);
     content.replaceChildren(
-      h('div', { class: 'detail-art' }, frag(unitArt(id))),
+      art,
       h('div', { class: 'stack' },
         h('div', { class: 'row between' }, h('p', { class: 'eyebrow' }, d.roleLabel), h('span', { class: 'chip' }, 'Cost ', h('span', { class: 'num', style: { color: 'var(--supply)' } }, String(d.cost)))),
         h('p', null, d.desc),
@@ -91,5 +110,5 @@ export function unitDetailScreen(app: App, id: string): Screen {
   };
   render();
   const el = h('section', { class: 'screen' }, topbar(app, d.name, () => app.go(hangarScreen), credits), content);
-  return { el, back: () => app.go(hangarScreen) };
+  return { el, back: () => app.go(hangarScreen), destroy: () => { gone = true; preview?.dispose(); } };
 }

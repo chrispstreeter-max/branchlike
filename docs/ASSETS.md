@@ -18,5 +18,6 @@ All art and audio in BRANCHLIKE 0.2 is original and generated in code. One third
 
 - Never import assets extracted from existing games.
 - Every new asset gets a row here: source, author, licence, date.
+- Frame models (`src/render/mechs3d.ts`) and their card portraits (`public/img/units/*.png`, rendered by `tools/render-cards.mjs`) are original BRANCHLIKE work created in this repository.
 - Commissioned art must come with a written transfer of rights or a licence that allows commercial distribution in app stores.
 - Before release, run a trademark search on "BRANCHLIKE", unit names and faction names.

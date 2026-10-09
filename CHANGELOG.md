@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.0 — Original frame designs
+
+### Added
+- Five fully designed original frames (`src/render/mechs3d.ts`, `docs/MECHS.md`): Warden, KESTREL-9, MONOLITH, VESPER and HALBERD PRIME. Each is built from extruded armour silhouettes on a jointed rig (hips, knees, feet, torso, arms), with signature parts and glow detail, in both faction palettes.
+- Procedural walk cycle: hip swing, knee fold (reverse-jointed for KESTREL-9), level feet, body dip, torso sway, arm swing, per-frame stride length, idle breathing. Footfall dust; heavy frames shake the camera slightly.
+- Hangar unit page shows a rotating, walking 3D model of the unit (falls back to the illustration without WebGL; static with reduce motion).
+- Card portraits for the frames are rendered from the 3D models (`tools/render-cards.mjs`, `public/img/units/`), so cards match the battlefield.
+- Design-sheet tool (`tools/mechsheet.mjs`).
+
+### Changed
+- Hand cards waiting for frame clearance get a `locked` class (used by the smoke test).
+
 ## 0.4.0 — Gameplay pass from Titanfall: Assault research
 
 ### Added

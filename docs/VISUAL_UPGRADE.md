@@ -66,14 +66,14 @@ Checked 9 October 2026. Prices change, so confirm them at purchase.
 | [Modular Robot: Mecha (Unity)](https://assetstore.unity.com/packages/3d/characters/robots/modular-robot-mecha-52868) | Mech kit | Unity Asset Store EULA | $49.99 | Last updated 2017 | **Rejected**: dated |
 | [Mech Constructor: Heavy Robot (Reallusion)](https://reallusion.com/ContentStore/Pack/mech-constructor-heavy-robot) | Mech kit | Reallusion content licence | $9.80 (sale) | Requires iClone or Character Creator; export terms unclear | **Rejected**: tool lock-in |
 
-**Conclusion on mechs:** no off-the-shelf mech pack is both current, mobile-friendly and distinctive. The mechs are the identity of BRANCHLIKE, so they should be original commissions.
+**Conclusion on mechs:** no off-the-shelf mech pack is both current, mobile-friendly and distinctive. The mechs are the identity of BRANCHLIKE, so they are original. **Update (0.5.0):** all five frames are now fully designed in-house in code, with jointed rigs and walk cycles (`docs/MECHS.md`). Commissioning textured models is now optional polish, not a gap.
 
 ## 4. Recommended stack (smallest coherent set)
 
 | Layer | Choice | Cost | Status |
 | --- | --- | --- | --- |
 | Renderer | Three.js r160 (vendored) | Free | ✅ Done |
-| Hero and line frames | Commissioned glTF models: KESTREL-9, MONOLITH, VESPER, Warden, HALBERD PRIME (≤ 6k triangles each, one 1024² texture atlas per team, rigged with leg and gun bones) | Needs quotes | ⏳ Needs your approval |
+| Hero and line frames | Commissioned glTF models: KESTREL-9, MONOLITH, VESPER, Warden, HALBERD PRIME (≤ 6k triangles each, one 1024² texture atlas per team, rigged with leg and gun bones) | Needs quotes | Optional (in-house designs shipped in 0.5.0) |
 | Infantry and pilots | One commissioned trooper base mesh, rigged for Mixamo | Needs quote; animations free | ⏳ Needs your approval and an Adobe ID |
 | Environment kit | Quaternius Modular Sci-Fi MegaKit (CC0) | Free, or $9.99+ to support | ⏳ Manual download (blocked from this workspace) |
 | Sound effects | Sonniss GDC 2026 bundle (royalty-free) | Free | ⏳ Manual download (7.5 GB; pick about 40 sounds) |

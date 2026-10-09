@@ -38,7 +38,7 @@ class View2D implements BattleView {
   dispose() { /* nothing to free */ }
 }
 
-function webglAvailable(): boolean {
+export function webglAvailable(): boolean {
   try {
     const c = document.createElement('canvas');
     return !!(c.getContext('webgl2') || c.getContext('webgl'));

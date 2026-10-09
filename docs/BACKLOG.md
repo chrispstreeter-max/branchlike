@@ -23,7 +23,9 @@ Status key: ✅ done · 🔄 in progress · ⬜ to do · ⛔ blocked
 - ⬜ Pilots that cross terrain (wall-running infantry ignoring building footprints).
 - ⬜ Maps that change during play (collapsing buildings, opening routes).
 - ⬜ Human playtest pass on real phones; tune supply rate, clearance times and mission 4/5 difficulty.
-- ⬜ Commission hero and line frames as glTF; add a GLTFLoader path in `buildModel()` (awaiting approval).
+- ✅ Original frame designs with jointed rigs and walk cycles (0.5.0, `docs/MECHS.md`).
+- ⬜ Optional: commissioned textured frames as glTF via a GLTFLoader path in `buildModel()`.
+- ⬜ Render card portraits for vehicles, infantry and structures from their 3D models too.
 - ⬜ Card illustrations rendered from the 3D models.
 - ⬜ Real-device frame-rate pass on older Android and recent iPhone.
 - ⬜ Capacitor native build; swap localStorage for Capacitor Preferences; haptics on deploy.

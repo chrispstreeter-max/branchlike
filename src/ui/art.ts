@@ -4,7 +4,11 @@
 const UNION = '#f2a93b';
 
 /** Unit silhouette in a 100×100 box. `c` is the team colour. */
+/** Frames with card portraits rendered from their 3D models (tools/render-cards.mjs). */
+const RENDERED = new Set(['warden_frame', 'kestrel', 'monolith', 'vesper', 'halberd_prime']);
+
 export function unitArt(id: string, c = UNION): string {
+  if (RENDERED.has(id) && c === UNION) return `<img class="art" src="img/units/${id}.png" alt="" aria-hidden="true" draggable="false">`;
   const d = shade(c, 0.55), dk = shade(c, 0.32), lt = '#e7eaed';
   const shadow = `<ellipse cx="50" cy="90" rx="30" ry="6" fill="#000" opacity=".35"/>`;
   let body = '';

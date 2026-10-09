@@ -12,7 +12,7 @@ import type { MapDef, Team } from '../data/types.js';
 import { WORLD_W as W, WORLD_H as H, CORE_POS, DEPLOY_LINE, FORWARD_DEPLOY_RADIUS, POINT_RADIUS } from '../data/maps.js';
 import { UNITS, ABILITIES } from '../data/units.js';
 import type { BattleView, Overlay } from './view.js';
-import { buildModel, Kit, type ModelSpec } from './models3d.js';
+import { buildModel, assemble, Kit, type ModelSpec, type AnimPart } from './models3d.js';
 import { LOOKS, paintGround, buildEnvironment, type MapLook } from './environment3d.js';
 
 type T3 = any;
@@ -20,7 +20,8 @@ const TEAM_HEX = ['#f2a93b', '#9583ff'];
 const TEAM_NUM = [0xf2a93b, 0x9583ff];
 const ENERGY = 0x6fd3ef;
 
-interface UnitView { root: T3; gun: T3 | null; legs: T3[]; spec: ModelSpec; x: number; y: number; yaw: number; phase: number; recoil: number; seen: boolean; structure: boolean; landed: boolean }
+interface RigNode { g: T3; part: AnimPart; y0: number }
+interface UnitView { root: T3; gun: T3 | null; legs: T3[]; rig: RigNode[]; spec: ModelSpec; x: number; y: number; yaw: number; phase: number; gait: number; stepSign: number; recoil: number; seen: boolean; structure: boolean; landed: boolean }
 interface PointView { pad: T3; ring: T3; arc: T3; beacon: T3; gem: T3; lastCap: number; lastOwner: Team | null | undefined }
 interface Line2D { x1: number; y1: number; h1: number; x2: number; y2: number; h2: number; t: number; T: number; color: string; width: number; kind: 'tracer' | 'beam' | 'heal' | 'rocket' }
 interface Proj { x1: number; y1: number; h1: number; x2: number; y2: number; h2: number; t: number; T: number; arc: number; color: [number, number, number]; trail: boolean; size: number }
@@ -420,6 +421,8 @@ export class View3D implements BattleView {
         for (const p of m.parts) p.pivot = [p.pivot[0] * s, p.pivot[1] * s, p.pivot[2] * s];
         m.muzzle = [m.muzzle[0] * s, m.muzzle[1] * s, m.muzzle[2] * s];
         m.height *= s;
+        if (m.strideLen) m.strideLen *= s;
+        if (m.hipY) m.hipY *= s;
       }
       this.models.set(key, m);
     }
@@ -429,25 +432,58 @@ export class View3D implements BattleView {
   private makeView(e: Entity): UnitView {
     const T = this.T;
     const spec = this.model(e.def.id, e.team);
-    const root = new T.Group();
     const shadows = this.quality === 'high';
-    const add = (parent: T3, geo: T3, mat: T3) => { if (!geo) return; const m = new T.Mesh(geo, mat); m.castShadow = shadows && mat === this.mats.hull; parent.add(m); };
-    add(root, spec.hull, this.mats.hull);
-    add(root, spec.glow, this.mats.glow);
-    let gun: T3 | null = null; const legs: T3[] = [];
-    for (const p of spec.parts) {
-      // Part geometry is authored relative to its pivot, so the group sits at the pivot.
-      const g = new T.Group(); g.position.set(...p.pivot);
-      add(g, p.hull, this.mats.hull); add(g, p.glow, this.mats.glow);
-      root.add(g);
-      if (p.role === 'gun') gun = g; else if (p.role === 'legL' || p.role === 'legR') { g.userData.sign = p.role === 'legL' ? 1 : -1; legs.push(g); }
+    const { root, nodes } = assemble(T, spec, (geo, glow) => { const m = new T.Mesh(geo, glow ? this.mats.glow : this.mats.hull); m.castShadow = shadows && !glow; return m; });
+    let gun: T3 | null = null; const legs: T3[] = []; const rig: RigNode[] = [];
+    for (const n of nodes) {
+      const r = n.part.role;
+      if (r === 'gun') gun = n.g;
+      else if (r === 'legL' || r === 'legR') { n.g.userData.sign = r === 'legL' ? 1 : -1; legs.push(n.g); }
+      if (r === 'hip' || r === 'knee' || r === 'foot' || r === 'torso' || r === 'arm') rig.push({ g: n.g, part: n.part, y0: n.g.position.y });
     }
     const structure = e.def.speed === 0;
     const yaw = -e.face;
     if (!structure) root.rotation.y = yaw;
     root.position.set(e.x, spec.hover, e.y);
     this.scene.add(root);
-    return { root, gun, legs, spec, x: e.x, y: e.y, yaw, phase: Math.random() * 6, recoil: 0, seen: true, structure, landed: false };
+    return { root, gun, legs, rig, spec, x: e.x, y: e.y, yaw, phase: Math.random() * 6, gait: 0, stepSign: 1, recoil: 0, seen: true, structure, landed: false };
+  }
+
+  /** Drive a jointed walker: hips swing, knees fold on the forward swing, feet stay level, torso sways. */
+  private animateRig(v: UnitView, e: Entity) {
+    const sp = v.spec, g = v.gait, ph = v.phase, kd = sp.kneeDir ?? 1;
+    for (const n of v.rig) {
+      const p = n.part, q = ph + (p.phase ?? 0), rest = p.rest ?? [0, 0, 0];
+      const hipD = Math.sin(q) * 0.42 * g;
+      const kneeD = -kd * Math.max(0, Math.cos(q)) * 0.8 * g;
+      switch (p.role) {
+        case 'hip': n.g.rotation.z = rest[2] + hipD; break;
+        case 'knee': n.g.rotation.z = rest[2] + kneeD; break;
+        case 'foot': n.g.rotation.z = rest[2] - hipD - kneeD; break;
+        case 'arm': n.g.rotation.z = rest[2] - Math.sin(q) * 0.3 * g; break;
+        case 'torso':
+          n.g.rotation.x = Math.sin(ph) * 0.04 * g;
+          n.g.rotation.y = Math.sin(ph) * 0.06 * g;
+          n.g.position.y = n.y0 + Math.sin(this.time * 2.2 + e.id) * 0.18 * (1 - g);
+          break;
+      }
+    }
+    // The body drops a little as the legs spread.
+    if (sp.hipY) v.root.position.y -= Math.abs(Math.sin(ph)) * sp.hipY * 0.07 * g;
+    // Footfall: each time a leg reaches the end of its swing.
+    const sign = Math.cos(ph) >= 0 ? 1 : -1;
+    if (sign !== v.stepSign) {
+      v.stepSign = sign;
+      if (g > 0.35 && v.landed) {
+        const heavy = !!sp.heavyStep;
+        const c = Math.cos(v.root.rotation.y), s = Math.sin(v.root.rotation.y);
+        for (const side of [-1, 1]) {
+          const fx = v.x + side * s * 5, fy = v.y + side * c * 5;
+          for (let i = 0; i < (heavy ? 5 : 2); i++) this.smoke.emit(fx, 1, fy, (Math.random() - 0.5) * 30, 4 + Math.random() * 6, (Math.random() - 0.5) * 30, 0.8, heavy ? 6 : 4, heavy ? 16 : 10, 0.46, 0.42, 0.37, 0.35, 0, 1.5);
+        }
+        if (heavy) this.shake = Math.max(this.shake, 1.2);
+      }
+    }
   }
 
   private syncUnits(b: Battle, dt: number) {
@@ -486,9 +522,16 @@ export class View3D implements BattleView {
         v.root.rotation.y += d * Math.min(1, dt * 9);
         if (v.spec.hover) v.root.rotation.z = Math.max(-0.25, Math.min(0.25, -moved * 0.4));
       }
-      if (e.stun <= 0 && moved > 0.01) v.phase += moved * 0.35;
-      const stride = v.spec.walker ? Math.min(1, moved * 3) : 0;
-      for (const leg of v.legs) leg.rotation.z = Math.sin(v.phase) * 0.45 * stride * leg.userData.sign;
+      if (v.rig.length) {
+        const speed = dt > 0 ? moved / dt : 0;
+        v.gait += ((e.stun <= 0 && speed > 1 ? 1 : 0) - v.gait) * Math.min(1, dt * 6);
+        if (e.stun <= 0) v.phase += moved * Math.PI / (v.spec.strideLen ?? 9);
+        this.animateRig(v, e);
+      } else {
+        if (e.stun <= 0 && moved > 0.01) v.phase += moved * 0.35;
+        const stride = v.spec.walker ? Math.min(1, moved * 3) : 0;
+        for (const leg of v.legs) leg.rotation.z = Math.sin(v.phase) * 0.45 * stride * leg.userData.sign;
+      }
       if (!v.spec.walker && !v.spec.hover && e.def.kind === 'infantry') v.root.position.y += Math.abs(Math.sin(v.phase * 1.3)) * Math.min(1, moved * 4) * 1.2;
       if (v.gun) { v.recoil = Math.max(0, v.recoil - dt * 6); const p0 = v.gun.userData.px ??= v.gun.position.x; v.gun.position.x = p0 - v.recoil * 2.5; }
       // Damage smoke from heavily damaged frames, vehicles and spires
@@ -725,13 +768,7 @@ export class View3D implements BattleView {
       if (!this.ghost || this.ghost.id !== g.unit) {
         if (this.ghost) this.scene.remove(this.ghost.group);
         const spec = this.model(g.unit, 0);
-        const group = new this.T.Group();
-        for (const geo of [spec.hull, spec.glow]) if (geo) group.add(new this.T.Mesh(geo, this.mats.ghostOk));
-        for (const p of spec.parts) {
-          const pg = new this.T.Group(); pg.position.set(...p.pivot);
-          for (const geo of [p.hull, p.glow]) if (geo) pg.add(new this.T.Mesh(geo, this.mats.ghostOk));
-          group.add(pg);
-        }
+        const group = assemble(this.T, spec, geo => new this.T.Mesh(geo, this.mats.ghostOk)).root;
         this.scene.add(group);
         this.ghost = { id: g.unit, group };
       }

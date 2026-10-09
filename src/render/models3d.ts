@@ -5,6 +5,7 @@
 // by returning a loaded glTF scene from the same `buildModel` entry point.
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { buildMech } from './mechs3d.js';
 type T3 = any;
 
 export interface TeamPalette { primary: number; secondary: number; dark: number; light: number; glow: number; energy: number; danger: number }
@@ -13,10 +14,25 @@ export const PALETTES: [TeamPalette, TeamPalette] = [
   { primary: 0x8a78f0, secondary: 0x393750, dark: 0x1b1a27, light: 0xd8d6e8, glow: 0xd2c6ff, energy: 0x6fd3ef, danger: 0xff4a3d },
 ];
 
-export type PartRole = 'legL' | 'legR' | 'gun' | 'rotor';
-/** Part geometry is authored relative to its pivot. */
-export interface AnimPart { role: PartRole; pivot: [number, number, number]; hull: T3 | null; glow: T3 | null }
-export interface ModelSpec { hull: T3 | null; glow: T3 | null; parts: AnimPart[]; height: number; hover: number; muzzle: [number, number, number]; walker: boolean }
+export type PartRole = 'legL' | 'legR' | 'gun' | 'rotor' | 'hip' | 'knee' | 'foot' | 'torso' | 'arm' | 'static';
+/**
+ * Part geometry is authored relative to its pivot. A part with `parent` hangs off
+ * another part (index into `parts`) and its pivot is relative to the parent's pivot.
+ * `rest` is the part's resting rotation; `phase` offsets its gait cycle (legs on
+ * opposite sides are half a cycle apart).
+ */
+export interface AnimPart { role: PartRole; pivot: [number, number, number]; hull: T3 | null; glow: T3 | null; parent?: number; phase?: number; rest?: [number, number, number] }
+export interface ModelSpec {
+  hull: T3 | null; glow: T3 | null; parts: AnimPart[]; height: number; hover: number; muzzle: [number, number, number]; walker: boolean;
+  /** Jointed walkers: +1 knees bend like a human's, -1 bend backwards (digitigrade). */
+  kneeDir?: number;
+  /** Ground covered per half gait cycle, in world units. */
+  strideLen?: number;
+  /** Hip height, used for the body bob as legs spread. */
+  hipY?: number;
+  /** Heavy walkers kick up dust on every footfall. */
+  heavyStep?: boolean;
+}
 
 /** Collects primitive parts and merges them into one coloured geometry. */
 export class Kit {
@@ -50,6 +66,22 @@ export class Kit {
   torus(r: number, tube: number, x: number, y: number, z: number, c: number, glow = true) {
     return this.add(this.place(new this.T.TorusGeometry(r, tube, 4, 12), x, y, z, Math.PI / 2, 0, 0), c, glow);
   }
+  /**
+   * Extrude a side-view silhouette. `pts` are [x, y] in the XY plane (front is +X);
+   * the shape is extruded `depth` along Z, centred on z. Rotations apply after.
+   */
+  profile(pts: [number, number][], depth: number, x: number, y: number, z: number, c: number, rot: [number, number, number] = [0, 0, 0], glow = false) {
+    const T = this.T;
+    const shape = new T.Shape();
+    pts.forEach(([px, py], i) => (i ? shape.lineTo(px, py) : shape.moveTo(px, py)));
+    shape.closePath();
+    const g = new T.ExtrudeGeometry(shape, { depth, bevelEnabled: false, steps: 1 });
+    g.translate(0, 0, -depth / 2);
+    g.deleteAttribute('uv');
+    return this.add(this.place(g, x, y, z, ...rot), c, glow);
+  }
+  /** Mirror helper: run `f` for z = +1 and z = -1. */
+  both(f: (side: 1 | -1) => void) { f(1); f(-1); return this; }
   /** A slanted plate: box rotated about Z (pitch) by `a` radians. */
   plate(w: number, h: number, d: number, x: number, y: number, z: number, c: number, a: number) {
     return this.box(w, h, d, x, y, z, c, [0, 0, a]);
@@ -85,15 +117,44 @@ export function merge(T: T3, parts: { g: T3; c: number }[]): T3 | null {
   return out;
 }
 
-function part(T: T3, role: PartRole, pivot: [number, number, number], fill: (k: Kit) => void): AnimPart {
+export function part(T: T3, role: PartRole, pivot: [number, number, number], fill: (k: Kit) => void, extra: Partial<AnimPart> = {}): AnimPart {
   const k = new Kit(T); fill(k); const b = k.build();
-  return { role, pivot, hull: b.hull, glow: b.glow };
+  return { role, pivot, hull: b.hull, glow: b.glow, ...extra };
+}
+
+/** Darken (f < 1) or lighten (f > 1) a hex colour. */
+export function shade(c: number, f: number): number {
+  const ch = (v: number) => Math.max(0, Math.min(255, Math.round(f > 1 ? v + (255 - v) * (f - 1) : v * f)));
+  return (ch(c >> 16 & 255) << 16) | (ch(c >> 8 & 255) << 8) | ch(c & 255);
+}
+
+export interface AssembledNode { g: T3; part: AnimPart }
+/**
+ * Build the scene graph for a model: one group per part at its pivot, parented
+ * as the spec says. `mesh` creates the mesh for a geometry (hull or glow).
+ */
+export function assemble(T: T3, spec: ModelSpec, mesh: (geo: T3, glow: boolean) => T3): { root: T3; nodes: AssembledNode[] } {
+  const root = new T.Group();
+  if (spec.hull) root.add(mesh(spec.hull, false));
+  if (spec.glow) root.add(mesh(spec.glow, true));
+  const nodes: AssembledNode[] = [];
+  for (const p of spec.parts) {
+    const g = new T.Group(); g.position.set(...p.pivot);
+    if (p.rest) g.rotation.set(...p.rest);
+    if (p.hull) g.add(mesh(p.hull, false));
+    if (p.glow) g.add(mesh(p.glow, true));
+    (p.parent !== undefined ? nodes[p.parent].g : root).add(g);
+    nodes.push({ g, part: p });
+  }
+  return { root, nodes };
 }
 
 // ---------------------------------------------------------------- unit models
 
 export function buildModel(T: T3, id: string, team: 0 | 1): ModelSpec {
   const P = PALETTES[team];
+  const mech = buildMech(T, id, P);
+  if (mech) return mech;
   const k = new Kit(T);
   const parts: AnimPart[] = [];
   let height = 14, hover = 0, muzzle: [number, number, number] = [6, 9, 0], walker = false;
