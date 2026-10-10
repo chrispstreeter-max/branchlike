@@ -31,6 +31,9 @@ export class App {
     } catch { /* history is unavailable in some embedded views */ }
   }
 
+  /** The screen on show (read-only; use go() to change it). */
+  get screen(): Screen | null { return this.current; }
+
   get persistent(): boolean { return (this.kv as { persistent?: boolean }).persistent !== false; }
 
   go(factory: ScreenFactory) {

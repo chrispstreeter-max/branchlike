@@ -1,0 +1,80 @@
+# Builds the BRANCHLIKE Android app (Capacitor) on every push to main and publishes
+# the APK to the "android-latest" pre-release, ready to install on a phone.
+name: Android app
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      # Keep one debug signing key across builds so a new APK installs over the old
+      # one (and keeps your saved progress). The key lives only in the Actions cache.
+      - name: Restore signing key
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: branchlike-debug-keystore-v1
+
+      - name: Build the game, add the Android project, build the APK
+        shell: bash
+        run: |
+          set -o pipefail
+          run() { echo "::group::$1"; shift; "$@" 2>&1 | tee -a build.log; local s=${PIPESTATUS[0]}; echo "::endgroup::"; return $s; }
+          run "Install" npm install --omit=optional --no-audit --no-fund
+          run "Web build" npm run build
+          run "Add Android" npx cap add android
+          run "Icons and splash" npx capacitor-assets generate --android
+          VERSION=$(node -p "require('./package.json').version")
+          sed -i "s/versionCode [0-9]*/versionCode ${{ github.run_number }}/; s/versionName \"[^\"]*\"/versionName \"$VERSION\"/" android/app/build.gradle
+          run "Sync" npx cap sync android
+          cd android && chmod +x gradlew
+          run "Gradle" ./gradlew assembleDebug --no-daemon --stacktrace
+          cd ..
+          cp android/app/build/outputs/apk/debug/app-debug.apk "BRANCHLIKE-$VERSION.apk"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Report the error lines
+        if: failure()
+        shell: bash
+        run: |
+          [ -f build.log ] || exit 0
+          grep -iE "error|failed|exception|could not|what went wrong" build.log | tail -n 10 | while IFS= read -r line; do echo "::error::${line:0:300}"; done
+
+      - name: Publish to the android-latest pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh release delete android-latest --yes --cleanup-tag || true
+          gh release create android-latest "BRANCHLIKE-$VERSION.apk" \
+            --prerelease --target "$GITHUB_SHA" \
+            --title "BRANCHLIKE $VERSION (Android test build ${{ github.run_number }})" \
+            --notes "Test build from commit ${GITHUB_SHA::7}. On your Android phone: download the APK, open it, and allow installs from your browser if asked. Not a Play Store release."
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BRANCHLIKE-apk
+          path: BRANCHLIKE-*.apk

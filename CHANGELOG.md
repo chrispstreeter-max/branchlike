@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.0 — Phone app (Android)
+
+### Added
+- GitHub Actions workflow (`.github/workflows/android.yml`) builds the Android app with Capacitor 8 on every push to `main` and publishes the APK to the `android-latest` pre-release.
+- App icon and splash screen rendered from the Warden model (`tools/render-app-assets.mjs`, `assets/`).
+- Native integration (`src/native.ts`): Android back button follows each screen's back action (top-level screens send the app to the background), status bar hidden, `native` class on the page.
+- Capacitor dependencies declared in `package.json`.
+
 ## 0.5.0 — Original frame designs
 
 ### Added

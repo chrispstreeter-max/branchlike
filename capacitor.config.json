@@ -2,8 +2,24 @@
   "appId": "com.chrispsdesigns.branchlike",
   "appName": "BRANCHLIKE",
   "webDir": "dist",
-  "bundledWebRuntime": false,
   "backgroundColor": "#0c0f13",
-  "android": { "backgroundColor": "#0c0f13" },
-  "ios": { "backgroundColor": "#0c0f13", "contentInset": "never" }
+  "android": {
+    "backgroundColor": "#0c0f13"
+  },
+  "ios": {
+    "backgroundColor": "#0c0f13",
+    "contentInset": "never"
+  },
+  "plugins": {
+    "StatusBar": {
+      "overlaysWebView": true,
+      "style": "DARK",
+      "backgroundColor": "#0c0f13"
+    },
+    "SplashScreen": {
+      "launchShowDuration": 800,
+      "backgroundColor": "#0c0f13",
+      "showSpinner": false
+    }
+  }
 }

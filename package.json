@@ -1,6 +1,6 @@
 {
   "name": "branchlike",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
   "description": "BRANCHLIKE \u2014 tactical real-time mech strategy for mobile. Original IP.",
   "type": "module",
@@ -9,10 +9,13 @@
     "test": "node tools/build.mjs --tests && node --test build/tests/*.test.js",
     "smoke": "node tools/build.mjs && node tools/smoke.mjs",
     "serve": "node tools/serve.mjs",
-    "sim": "node tools/build.mjs --tests && node build/tools/balance.js"
+    "sim": "node tools/build.mjs --tests && node build/tools/balance.js",
+    "app:assets": "node tools/build.mjs && node tools/render-app-assets.mjs"
   },
   "license": "UNLICENSED",
   "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^8.0.0",
     "typescript": "^5.6.0"
   },
   "optionalDependencies": {
@@ -20,5 +23,11 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.0.0",
+    "@capacitor/app": "^8.0.0",
+    "@capacitor/core": "^8.0.0",
+    "@capacitor/status-bar": "^8.0.0"
   }
 }
