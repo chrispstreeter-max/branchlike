@@ -47,16 +47,29 @@ Open `http://localhost:5173` on a phone on the same network, or use your browser
 
 ## Mobile builds
 
-The game is a static web app in `dist/`, so it can be wrapped as a native app with [Capacitor](https://capacitorjs.com). `capacitor.config.json` is already in the repo.
+### Android (automatic)
+
+Every push to `main` builds the Android app on GitHub (`.github/workflows/android.yml`, Capacitor 8) and publishes it to the [`android-latest` pre-release](https://github.com/chrispstreeter-max/branchlike/releases/tag/android-latest).
+
+To install on an Android phone: open that page on the phone, download `BRANCHLIKE-<version>.apk`, open it, and allow installs from your browser when Android asks. New builds install over the old one and keep your progress. This is a test build signed with a debug key, not a Play Store release.
+
+### iPhone
+
+iOS builds need a Mac with Xcode and an Apple Developer account (US$99 a year) to install on a phone:
 
 ```bash
-npm i -D @capacitor/cli @capacitor/core @capacitor/ios @capacitor/android
+npm install
 npm run build
-npx cap add android && npx cap sync android && npx cap open android   # Android Studio
-npx cap add ios && npx cap sync ios && npx cap open ios               # macOS + Xcode
+npx cap add ios && npx cap sync ios && npx cap open ios   # then Run in Xcode
 ```
 
-For a native build, swap `browserKV()` in `src/meta/save.ts` for Capacitor Preferences so saves survive OS storage clean-up.
+### Icon and splash
+
+`assets/` holds the app icon and splash screen, rendered from the Warden model by `npm run app:assets`. The workflow turns them into every Android size with `@capacitor/assets`.
+
+### Saves
+
+Saves use the WebView's local storage, which persists on Android until the app's data is cleared. Before an App Store release, move saves to Capacitor Preferences, because iOS can clear WebView storage when the phone is short of space.
 
 ## Project layout
 
