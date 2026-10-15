@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.7.0 — Epic battlefield pass
+
+### Changed
+- Lower, wider-angle battle camera (36° portrait, 38° landscape, 40° field of view) so buildings and frames read in full 3D.
+- Low sun for long, dramatic shadows; frames drawn larger (×1.32).
+
+### Added
+- Sky dome, ground to the horizon and a ring of distant towers fading into haze (`buildHorizon` in `environment3d.ts`).
+- Fireball cores in every explosion.
+- Destroyed frames and vehicles leave charred, slumping wrecks that burn and smoke for about 24 seconds (up to 8 at once).
+- Frame-fall: a closing target ring marks the landing spot; bigger landing shockwave, fireball and shake.
+- Debug hook `deployFor(team, …)` for scripted battles.
+
 ## 0.6.0 — Phone app (Android)
 
 ### Added

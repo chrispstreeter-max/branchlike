@@ -310,3 +310,42 @@ export function buildEnvironment(T: T3, map: MapDef, L: MapLook, mats: { static:
   mk(nearCtx.kit, nearCtx.signs, nearGroup);
   return { group, nearGroup, ground: document.createElement('canvas') };
 }
+
+// ------------------------------------------------------------------ horizon
+
+/**
+ * Sky dome, ground to the horizon and a distant skyline that fades into the haze,
+ * so the low battle camera never looks off the edge of the world. Three draw calls.
+ */
+export function buildHorizon(T: T3, L: MapLook, mat: T3): T3 {
+  const group = new T.Group();
+  const cx = W / 2, cz = H / 2;
+  // Sky: horizon matches the fog colour, deepening toward the zenith.
+  const skyGeo = new T.SphereGeometry(4200, 32, 16);
+  const pos = skyGeo.attributes.position, cols = new Float32Array(pos.count * 3);
+  const horizon = new T.Color(L.bg), zenith = new T.Color(L.bg).lerp(new T.Color(L.bg > 0x404040 ? 0x3d6aa8 : 0x05070d), 0.65), c = new T.Color();
+  for (let i = 0; i < pos.count; i++) {
+    const t = Math.max(0, pos.getY(i) / 4200);
+    c.copy(horizon).lerp(zenith, Math.pow(t, 0.55));
+    cols.set([c.r, c.g, c.b], i * 3);
+  }
+  skyGeo.setAttribute('color', new T.BufferAttribute(cols, 3));
+  const sky = new T.Mesh(skyGeo, new T.MeshBasicMaterial({ vertexColors: true, side: T.BackSide, fog: false, depthWrite: false, toneMapped: false }));
+  sky.position.set(cx, 0, cz); sky.renderOrder = -10;
+  // Ground beyond the city, under the field (the field's own ground sits just above).
+  const land = new T.Mesh(new T.PlaneGeometry(9000, 9000), new T.MeshStandardMaterial({ color: L.terrain, roughness: 1, metalness: 0 }));
+  land.rotation.x = -Math.PI / 2; land.position.set(cx, -0.6, cz);
+  // Distant towers in a ring around the arena; fog turns them into silhouettes.
+  const k = new Kit(T), rnd = rng(7);
+  for (let i = 0; i < 90; i++) {
+    const a = (i / 90) * Math.PI * 2 + rnd() * 0.05, r = 820 + rnd() * 700;
+    const w = 50 + rnd() * 90, d = 50 + rnd() * 90, h = 90 + rnd() * rnd() * 520;
+    const col = L.building[Math.floor(rnd() * L.building.length)];
+    k.box(w, h, d, cx + Math.cos(a) * r, h / 2, cz + Math.sin(a) * r * 1.25, col, [0, a, 0]);
+    if (rnd() < 0.35) k.box(w * 0.5, h * 0.25, d * 0.5, cx + Math.cos(a) * r, h + h * 0.125, cz + Math.sin(a) * r * 1.25, col, [0, a, 0]);
+  }
+  const b = k.build();
+  const towers = new T.Mesh(b.hull, mat);
+  group.add(sky, land, towers);
+  return group;
+}

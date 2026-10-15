@@ -459,6 +459,7 @@ export function battleScreen(app: App, params: BattleParams): Screen {
   if (debug) (globalThis as any).__branchlike = {
     battle: b,
     deploy: (i: number, x: number, y: number) => deploy(b, 0, i, x, y),
+    deployFor: (team: 0 | 1, i: number, x: number, y: number) => deploy(b, team, i, x, y),
     deployTo: (i: number, x: number, y: number) => deployTo(b, 0, i, x, y),
     ability: (src: number | 'pilot', x?: number, y?: number) => useAbility(b, 0, src, x, y),
     viewStats: () => (view as any)?.stats?.() ?? null,

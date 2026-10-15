@@ -13,7 +13,7 @@ import { WORLD_W as W, WORLD_H as H, CORE_POS, DEPLOY_LINE, FORWARD_DEPLOY_RADIU
 import { UNITS, ABILITIES } from '../data/units.js';
 import type { BattleView, Overlay } from './view.js';
 import { buildModel, assemble, Kit, type ModelSpec, type AnimPart } from './models3d.js';
-import { LOOKS, paintGround, buildEnvironment, type MapLook } from './environment3d.js';
+import { LOOKS, paintGround, buildEnvironment, buildHorizon, type MapLook } from './environment3d.js';
 
 type T3 = any;
 const TEAM_HEX = ['#f2a93b', '#9583ff'];
@@ -21,7 +21,7 @@ const TEAM_NUM = [0xf2a93b, 0x9583ff];
 const ENERGY = 0x6fd3ef;
 
 interface RigNode { g: T3; part: AnimPart; y0: number }
-interface UnitView { root: T3; gun: T3 | null; legs: T3[]; rig: RigNode[]; spec: ModelSpec; x: number; y: number; yaw: number; phase: number; gait: number; stepSign: number; recoil: number; seen: boolean; structure: boolean; landed: boolean }
+interface UnitView { kind: string; root: T3; gun: T3 | null; legs: T3[]; rig: RigNode[]; spec: ModelSpec; x: number; y: number; yaw: number; phase: number; gait: number; stepSign: number; recoil: number; seen: boolean; structure: boolean; landed: boolean }
 interface PointView { pad: T3; ring: T3; arc: T3; beacon: T3; gem: T3; lastCap: number; lastOwner: Team | null | undefined }
 interface Line2D { x1: number; y1: number; h1: number; x2: number; y2: number; h2: number; t: number; T: number; color: string; width: number; kind: 'tracer' | 'beam' | 'heal' | 'rocket' }
 interface Proj { x1: number; y1: number; h1: number; x2: number; y2: number; h2: number; t: number; T: number; arc: number; color: [number, number, number]; trail: boolean; size: number }
@@ -131,6 +131,8 @@ export class View3D implements BattleView {
   private rings: { mesh: T3; t: number; T: number; r0: number; r1: number; a: number }[] = [];
   private beams: { mesh: T3; t: number; T: number }[] = [];
   private decals: T3[] = [];
+  private fireballs: { mesh: T3; t: number; T: number; r: number; h: number }[] = [];
+  private wrecks: { root: T3; t: number; x: number; y: number; ax: number; az: number; h: number }[] = [];
   private decalIdx = 0;
   private lights: { light: T3; t: number }[] = [];
   private shake = 0;
@@ -164,7 +166,7 @@ export class View3D implements BattleView {
     this.gl.shadowMap.enabled = high;
     this.gl.shadowMap.type = T.PCFSoftShadowMap;
     this.scene = new T.Scene();
-    this.camera = new T.PerspectiveCamera(30, 1, 10, 5000);
+    this.camera = new T.PerspectiveCamera(40, 1, 10, 6000);
     this.target = new T.Vector3(W / 2, 0, 318);
     this.camBase = new T.Vector3();
     this.hemi = new T.HemisphereLight(0xffffff, 0x333333, 1);
@@ -177,7 +179,7 @@ export class View3D implements BattleView {
       this.sun.castShadow = true;
       this.sun.shadow.mapSize.set(2048, 2048);
       const c = this.sun.shadow.camera;
-      c.left = -300; c.right = 300; c.top = 420; c.bottom = -420; c.near = 50; c.far = 1400;
+      c.left = -420; c.right = 420; c.top = 480; c.bottom = -480; c.near = 50; c.far = 1600;
       this.sun.shadow.bias = -0.0006;
       this.sun.shadow.normalBias = 0.6;
     }
@@ -187,6 +189,8 @@ export class View3D implements BattleView {
     this.mats.hull = new T.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.55, metalness: 0.35 });
     this.mats.glow = new T.MeshBasicMaterial({ vertexColors: true, toneMapped: false });
     this.mats.static = new T.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.85, metalness: 0.12 });
+    this.mats.wreck = new T.MeshStandardMaterial({ color: 0x2b2725, roughness: 1, metalness: 0.1, flatShading: true });
+    this.mats.ember = new T.MeshBasicMaterial({ color: 0xff6a1f, toneMapped: false });
     this.mats.ghostOk = new T.MeshBasicMaterial({ color: 0xf2a93b, transparent: true, opacity: 0.45, depthWrite: false });
     this.mats.ghostBad = new T.MeshBasicMaterial({ color: 0xff6158, transparent: true, opacity: 0.45, depthWrite: false });
     this.staticGroup = new T.Group();
@@ -233,6 +237,12 @@ export class View3D implements BattleView {
       const m = new T.Mesh(dg, new T.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, opacity: 0.8 }));
       m.visible = false; m.renderOrder = 1; this.scene.add(m); this.decals.push(m);
     }
+    const fbGeo = new T.IcosahedronGeometry(1, 2);
+    for (let i = 0; i < 12; i++) {
+      const m = new T.Mesh(fbGeo, new T.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false, blending: T.AdditiveBlending, toneMapped: false }));
+      m.visible = false; m.renderOrder = 5; this.scene.add(m);
+      this.fireballs.push({ mesh: m, t: 0, T: 1, r: 1, h: 0 });
+    }
     if (this.quality === 'high') for (let i = 0; i < 2; i++) { const l = new T.PointLight(0xffb36b, 0, 140, 1.6); this.scene.add(l); this.lights.push({ light: l, t: 0 }); }
   }
 
@@ -261,6 +271,8 @@ export class View3D implements BattleView {
     const L = this.look;
     for (const v of this.units.values()) this.scene.remove(v.root);
     this.units.clear();
+    for (const w of this.wrecks) this.scene.remove(w.root);
+    this.wrecks = [];
     for (const p of this.points) for (const m of [p.pad, p.ring, p.arc, p.beacon, p.gem]) this.scene.remove(m);
     this.points = [];
     this.lines = []; this.projs = [];
@@ -281,6 +293,7 @@ export class View3D implements BattleView {
     // Buildings, trees, signage and street furniture
     const env = buildEnvironment(T, map, L, { static: this.mats.static, glow: this.mats.glow }, this.quality === 'high');
     this.staticGroup.add(env.group, env.nearGroup);
+    this.staticGroup.add(buildHorizon(T, L, this.mats.static));
     this.nearGroup = env.nearGroup;
     this.nearGroup.visible = !this.landscape;
     this.buildPoints(map);
@@ -331,8 +344,10 @@ export class View3D implements BattleView {
     this.landscape = this.cssW > this.cssH * 1.05;
     if (this.nearGroup) this.nearGroup.visible = !this.landscape;
     // Keep the sun on the camera's side so building faces toward the player are lit.
-    this.sun.position.copy(this.target).add(this.landscape ? new T.Vector3(210, 430, 160) : new T.Vector3(-230, 430, 170));
-    const el = (this.landscape ? 54 : 50) * Math.PI / 180;
+    // Low sun: long shadows for a more dramatic battlefield.
+    this.sun.position.copy(this.target).add(this.landscape ? new T.Vector3(330, 300, 230) : new T.Vector3(-340, 300, 260));
+    // Low, wide-angle camera for a cinematic, more 3D battlefield.
+    const el = (this.landscape ? 38 : 36) * Math.PI / 180;
     const dir = this.landscape ? new T.Vector3(Math.cos(el), Math.sin(el), 0) : new T.Vector3(0, Math.sin(el), Math.cos(el));
     const V = (a: number[][]) => a.map(([x, y, z]) => new T.Vector3(x, y, z));
     // Fitting points. The near edge may crop slightly so units stay large.
@@ -415,7 +430,7 @@ export class View3D implements BattleView {
       m = buildModel(this.T, id, team);
       // Units are drawn larger than their collision size so they read on a phone screen.
       const kind = UNITS[id]?.kind;
-      const s = kind === 'infantry' ? 1.6 : kind === 'drone' ? 1.5 : kind === 'vehicle' ? 1.3 : kind === 'structure' ? 1.25 : kind === 'mech' || kind === 'hero' ? 1.18 : kind === 'boss' ? 1.1 : 1;
+      const s = kind === 'infantry' ? 1.6 : kind === 'drone' ? 1.5 : kind === 'vehicle' ? 1.3 : kind === 'structure' ? 1.25 : kind === 'mech' || kind === 'hero' ? 1.32 : kind === 'boss' ? 1.1 : 1;
       if (s !== 1) {
         for (const g of [m.hull, m.glow, ...m.parts.flatMap(p => [p.hull, p.glow])]) g?.scale(s, s, s);
         for (const p of m.parts) p.pivot = [p.pivot[0] * s, p.pivot[1] * s, p.pivot[2] * s];
@@ -444,9 +459,11 @@ export class View3D implements BattleView {
     const structure = e.def.speed === 0;
     const yaw = -e.face;
     if (!structure) root.rotation.y = yaw;
+    // Frame-fall target marker: a ring that closes in on the landing spot.
+    if (e.def.kind === 'mech' || e.def.kind === 'hero') this.ring(e.x, e.y, e.def.radius * 3, e.def.radius * 0.8, 0.75, TEAM_NUM[e.team], 0.9);
     root.position.set(e.x, spec.hover, e.y);
     this.scene.add(root);
-    return { root, gun, legs, rig, spec, x: e.x, y: e.y, yaw, phase: Math.random() * 6, gait: 0, stepSign: 1, recoil: 0, seen: true, structure, landed: false };
+    return { kind: e.def.kind, root, gun, legs, rig, spec, x: e.x, y: e.y, yaw, phase: Math.random() * 6, gait: 0, stepSign: 1, recoil: 0, seen: true, structure, landed: false };
   }
 
   /** Drive a jointed walker: hips swing, knees fold on the forward swing, feet stay level, torso sways. */
@@ -503,11 +520,12 @@ export class View3D implements BattleView {
       const drop = age < dropT && e.def.kind !== 'core' && e.def.kind !== 'boss' ? Math.pow(1 - age / dropT, 2) * dropH : 0;
       if (heavyDrop && !v.landed && age >= dropT) {
         v.landed = true;
-        this.ring(e.x, e.y, 8, 70, 0.6, 0xffe2b0, 1);
+        this.ring(e.x, e.y, 8, 95, 0.7, 0xffe2b0, 1);
+        this.fireball(e.x, e.y, 5, 20, 0.5);
         this.decal(e.x, e.y, e.def.radius * 1.3);
         for (let i = 0; i < 22; i++) { const a = Math.random() * 6.28; this.smoke.emit(e.x, 2, e.y, Math.cos(a) * 70, 8 + Math.random() * 12, Math.sin(a) * 70, 1.2, 6, 22, 0.42, 0.39, 0.35, 0.6, 0, 2.2); }
         this.flash(e.x, e.y, 4, 4);
-        this.shake = Math.max(this.shake, 6);
+        this.shake = Math.max(this.shake, 8);
       } else if (heavyDrop && age < dropT && Math.random() < 0.6) {
         this.glow.emit(e.x, drop + 10, e.y, 0, 40, 0, 0.25, 10, 3, 1, 0.7, 0.4, 0.9);
       }
@@ -539,7 +557,18 @@ export class View3D implements BattleView {
         this.smoke.emit(v.x + (Math.random() - 0.5) * 6, v.spec.height * 0.85, v.y + (Math.random() - 0.5) * 6, 2, 14, -3, 2.2, 6, 22, 0.12, 0.11, 0.1, 0.6, -2, 0.4);
       }
     }
-    for (const [id, v] of this.units) if (!v.seen) { this.scene.remove(v.root); this.units.delete(id); }
+    for (const [id, v] of this.units) if (!v.seen) { this.units.delete(id); if (!this.wreck(v)) this.scene.remove(v.root); }
+  }
+
+  /** Destroyed frames and vehicles leave a burning wreck for a while instead of vanishing. */
+  private wreck(v: UnitView): boolean {
+    if (!['mech', 'hero', 'vehicle', 'boss'].includes(v.kind) || !this.lastBattle || this.lastBattle.result) return false;
+    v.root.traverse((m: T3) => { if (m.isMesh) m.material = m.material === this.mats.glow ? this.mats.ember : this.mats.wreck; });
+    const a = Math.random() * Math.PI * 2;
+    this.wrecks.push({ root: v.root, t: 24, x: v.x, y: v.y, ax: Math.cos(a) * 0.35, az: Math.sin(a) * 0.35, h: v.spec.height });
+    // shortcut: cap of 8 wrecks keeps draw calls bounded; raise on faster phones.
+    while (this.wrecks.length > 8) this.scene.remove(this.wrecks.shift()!.root);
+    return true;
   }
 
   private muzzleOf(v: UnitView | undefined, x: number, y: number, hFallback: number) {
@@ -577,6 +606,12 @@ export class View3D implements BattleView {
     const d = this.decals[this.decalIdx++ % this.decals.length];
     d.position.set(x, 0.3 + (this.decalIdx % 7) * 0.02, y); d.scale.set(r * 2, 1, r * 2); d.rotation.y = Math.random() * 6; d.material.opacity = 0.8; d.visible = true;
   }
+  /** Expanding fireball core: white-hot, then orange, then gone. */
+  private fireball(x: number, y: number, h: number, r: number, T: number) {
+    const f = this.fireballs.find(q => q.t <= 0) ?? this.fireballs.reduce((a, q) => (q.t < a.t ? q : a));
+    f.t = T; f.T = T; f.r = r; f.h = h; f.mesh.position.set(x, h, y); f.mesh.visible = true;
+  }
+
   private flash(x: number, y: number, h: number, power: number) {
     if (!this.lights.length) return;
     const l = this.lights.find(q => q.t <= 0) ?? this.lights[0];
@@ -595,6 +630,7 @@ export class View3D implements BattleView {
     this.ring(x, y, r * 0.3, r * (big ? 2.6 : 1.8), big ? 0.55 : 0.35, big ? 0xffd9a0 : TEAM_NUM[team], 0.9);
     this.decal(x, y, r * (big ? 1.4 : 0.9));
     this.flash(x, y, 6, big ? 5 : 2.5);
+    this.fireball(x, y, big ? 8 : 4, r * (big ? 1.3 : 0.7), big ? 0.75 : 0.4);
     if (!reduceMotion) this.shake = Math.max(this.shake, big ? 6 : 1.6);
   }
 
@@ -701,6 +737,25 @@ export class View3D implements BattleView {
       r.mesh.material.opacity = r.a * (1 - k);
       if (r.t <= 0) r.mesh.visible = false;
     }
+    for (const f of this.fireballs) if (f.t > 0) {
+      f.t -= dt; const k = 1 - f.t / f.T;
+      f.mesh.scale.setScalar(f.r * (0.3 + 0.7 * Math.sqrt(k)));
+      f.mesh.position.y = f.h + k * f.r * 0.6;
+      // Saturated orange: additive white washes out on pale streets.
+      f.mesh.material.color.setRGB(1, 0.62 - 0.45 * k, 0.16 * (1 - k));
+      f.mesh.material.opacity = Math.pow(1 - k, 1.2);
+      if (f.t <= 0) f.mesh.visible = false;
+    }
+    for (const w of this.wrecks) {
+      w.t -= dt;
+      const age = 24 - w.t, fall = Math.min(1, age / 1.1);
+      w.root.rotation.x = w.ax * fall; w.root.rotation.z = w.az * fall;
+      w.root.position.y = -w.h * 0.1 * fall - Math.max(0, 2.5 - w.t) * w.h * 0.25;
+      if (Math.random() < dt * (w.t > 14 ? 10 : 3)) this.smoke.emit(w.x + (Math.random() - 0.5) * 8, w.h * 0.5, w.y + (Math.random() - 0.5) * 8, 1, 16, -2, 2.4, 6, 24, 0.1, 0.09, 0.08, 0.6, -2, 0.4);
+      if (w.t > 10 && Math.random() < dt * 8) this.glow.emit(w.x + (Math.random() - 0.5) * 10, w.h * 0.35, w.y + (Math.random() - 0.5) * 10, 0, 14, 0, 0.5, 6, 2, 1, 0.5, 0.15, 1);
+    }
+    for (const w of this.wrecks) if (w.t <= 0) this.scene.remove(w.root);
+    this.wrecks = this.wrecks.filter(w => w.t > 0);
     for (const bm of this.beams) if (bm.t > 0) { bm.t -= dt; bm.mesh.material.opacity = 0.5 * (bm.t / bm.T); if (bm.t <= 0) bm.mesh.visible = false; }
     for (const d of this.decals) if (d.visible) d.material.opacity = Math.max(0.25, d.material.opacity - dt * 0.02);
     for (const l of this.lights) if (l.t > 0) { l.t -= dt; l.light.intensity *= Math.pow(0.002, dt); if (l.t <= 0) l.light.intensity = 0; }
